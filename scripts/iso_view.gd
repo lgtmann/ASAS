@@ -85,6 +85,7 @@ var view_level: int = VoxelWorld.GROUND
 # rest of the time without snapping back).
 var _last_selected_level: int = -999
 const FADE_BELOW := 0.32                # one+ levels below focal
+const FADE_NEAR_ABOVE := 0.92           # one level above focal (surface protrusions)
 const FOG_COLOR := Color(0.66, 0.66, 0.70)   # unseen cube color
 const WIRE_ALPHA := 0.55                # outline strength for above-focal cubes
 const WIRE_WIDTH := 1.4                 # outline thickness for wireframe cubes
@@ -218,13 +219,15 @@ func _draw() -> void:
 	_draw_projectiles()
 
 func _level_alpha(y: int) -> float:
-	# Alpha for cubes AT/BELOW the focal level. Above-focal cubes don't go through
-	# this — they wireframe instead (see _draw_cube).
+	# Alpha for cubes AT or NEAR (one level above) the focal level. Cubes more
+	# than one level above wireframe instead (see _draw_cube).
 	if y == view_level:
 		return 1.0
+	if y == view_level + 1:
+		return FADE_NEAR_ABOVE
 	if y < view_level:
 		return FADE_BELOW
-	return 0.0   # never used; above-focal cubes early-out into the wireframe path
+	return 0.0   # never used; far-above cubes early-out into the wireframe path
 
 func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var shake := Vector2(0, _quake_offset(c))
@@ -243,10 +246,10 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	else:
 		base_col = FOG_COLOR
 
-	# Cubes ABOVE the focal level render as wireframe only — see-through to ops
-	# below. The line color is the material's hue at WIRE_ALPHA so you still
-	# read what tier the cube is (gold / crystal / relic glow through).
-	if c.y > view_level:
+	# Cubes >1 level above the focal layer render as wireframe only — see-through
+	# to ops below. The level just above focal (surface protrusions like trees
+	# / boulders when you're on the ground) renders solid via the normal path.
+	if c.y > view_level + 1:
 		var wire_col := Color(base_col.r, base_col.g, base_col.b, WIRE_ALPHA)
 		draw_polyline(PackedVector2Array([p010, p110, p111, p011, p010]), wire_col, WIRE_WIDTH)
 		draw_polyline(PackedVector2Array([p100, p110, p111, p101, p100]), wire_col, WIRE_WIDTH)
