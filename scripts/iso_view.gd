@@ -13,6 +13,7 @@ const HEIGHT_STEP := 22.0
 const MODE_COLORS := {
 	"move": Color(0.40, 1.00, 0.50),
 	"dig": Color(1.00, 0.60, 0.15),
+	"dig_raise": Color(0.78, 0.55, 0.30),     # earth-brown — "dump dirt here"
 	"swing": Color(1.00, 0.40, 0.30),
 	"throw": Color(0.35, 0.85, 1.00),
 	"place_operator": Color(0.55, 0.90, 1.00),
@@ -54,6 +55,9 @@ var origin: Vector2 = Vector2(800, 280)
 var mode: String = ""
 var targets: Array = []
 var pending_card = null            # card that's mid-placement (Operator)
+# Two-step dig source: the solid cell the player picked first. Cleared once
+# the raise destination is picked (or the action is cancelled).
+var _dig_source: Vector3i = Vector3i(-9999, -9999, -9999)
 
 # Cosmetic in-flight spade projectiles. Each: {from, to, t, dur, boomerang}.
 # A one-way throw runs t in [0, 1]; a boomerang runs t in [0, 2] (out then back).
@@ -544,6 +548,12 @@ func _cancel_action() -> void:
 		selected_cards.clear()
 		_on_changed()
 		return
+	# Mid-dig (source picked, waiting on raise): drop back to dig source pick.
+	if mode == "dig_raise":
+		_dig_source = Vector3i(-9999, -9999, -9999)
+		mode = "move"
+		_on_changed()
+		return
 	if pending_card != null:
 		pending_card = null
 		mode = "move"
@@ -610,9 +620,26 @@ func _act_on(cell) -> void:
 	var u = gs.selected
 	if u == null:
 		return
+	# Two-step dig has its own dispatch.
+	if mode == "dig":
+		_dig_source = cell
+		mode = "dig_raise"
+		_on_changed()
+		if targets.is_empty():
+			gs.notice.emit("No raise destination near that tile — pick a different source.")
+			_dig_source = Vector3i(-9999, -9999, -9999)
+			mode = "dig"
+			_on_changed()
+		else:
+			gs.notice.emit("Pick where the dirt should pile up.")
+		return
+	if mode == "dig_raise":
+		gs.dig_and_raise(u, _dig_source, cell)
+		_dig_source = Vector3i(-9999, -9999, -9999)
+		mode = "move"
+		return
 	match mode:
 		"move": gs.move_to(u, cell)
-		"dig": gs.dig_at(u, cell)
 		"swing": gs.swing_at(u, cell)
 		"throw": gs.throw_at(u, cell)
 
@@ -636,6 +663,7 @@ func _targets_for_mode() -> Array:
 	match mode:
 		"move": return gs.move_targets(u)
 		"dig": return gs.dig_targets(u)
+		"dig_raise": return gs.dig_raise_targets(u, _dig_source)
 		"swing": return gs.swing_targets(u)
 		"throw": return gs.throw_targets(u)
 	return []
@@ -783,12 +811,18 @@ func _on_sim_toggled(on: bool) -> void:
 		_kick_ai()
 
 # Turn-started → if the active team is AI-controlled (enemy, or sim mode),
-# autopilot it. Otherwise hand control to the player.
+# autopilot it. Otherwise hand control to the player and auto-select the
+# leader so the camera + hand reset to base each turn.
 func _on_turn_started(team: int) -> void:
 	if gs.is_over:
 		return
 	if team == GameState.TEAM_ENEMY or gs.sim_mode:
 		_kick_ai()
+		return
+	if team == GameState.TEAM_PLAYER:
+		var leader = _player_leader()
+		if leader != null:
+			gs.select(leader)        # _on_changed will re-focus view_level
 
 func _kick_ai() -> void:
 	if _ai_running or gs.is_over:

@@ -894,6 +894,71 @@ func _pick_dig_raise_dest(u, source: Vector3i):
 		return null
 	return cands[randi() % cands.size()]
 
+# Cells the player can pick to *deposit* the dug-out dirt: empty standable
+# cells adjacent to either the dig source or the operator's current position
+# (so the choice covers the natural reshape area).
+func dig_raise_targets(u, source: Vector3i) -> Array:
+	if u == null:
+		return []
+	var out: Array = []
+	for d in CARDINAL_6:
+		var p: Vector3i = source + d
+		if p == u.grid:
+			continue
+		if world.is_standable(p) and unit_at(p) == null:
+			out.append(p)
+	for d in CARDINAL_6:
+		var p: Vector3i = u.grid + d
+		if p == source:
+			continue
+		if world.is_standable(p) and unit_at(p) == null:
+			if not out.has(p):
+				out.append(p)
+	return out
+
+# Two-step atomic dig: clear `source`, raise `dest` to EARTH. Mirrors dig_at's
+# treasure / descent / strength behaviour but with a player-chosen deposit
+# instead of the random auto-pick.
+func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
+	if u == null or u.spade == null:
+		notice.emit("No spade to dig with.")
+		return false
+	if not world.is_solid(source):
+		notice.emit("Source isn't a solid tile.")
+		return false
+	if not (world.is_standable(dest) and unit_at(dest) == null):
+		notice.emit("Destination isn't a valid raise target.")
+		return false
+	if not _consume_action(u):
+		return false
+	var rewards: Array = []
+	var depth: int = u.spade.dig_depth + (1 if u.strength else 0)
+	var dig_from: Vector3i = u.grid
+	if source == u.grid + DOWN:
+		for i in depth:
+			var below: Vector3i = u.grid + DOWN
+			if not world.is_solid(below):
+				break
+			var mat: int = world.dig_cell(below)
+			var label: String = _treasure_reward(mat)
+			if label != "":
+				rewards.append(label)
+			u.grid = below
+	else:
+		var mat: int = world.dig_cell(source)
+		var label: String = _treasure_reward(mat)
+		if label != "":
+			rewards.append(label)
+	world.set_material(dest, VoxelWorld.Mat.EARTH)
+	if not rewards.is_empty():
+		notice.emit("Dug — " + ", ".join(rewards))
+	else:
+		notice.emit("Dirt moved to %d, %d, %d." % [dest.x, dest.y, dest.z])
+	if u.grid != dig_from:
+		unit_animated_move.emit(u, dig_from, u.grid)
+	_emit_changed()
+	return true
+
 # Back-compat shim for the 3D scene's hotkey-driven dig.
 func dig(u) -> void:
 	if u == null:
