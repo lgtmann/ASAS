@@ -5,17 +5,19 @@ extends Node3D
 # absent from `cells`. Owns the cube meshes and exposes queries/mutations the
 # game logic uses (dig, clear, walkability). World units == grid units (1 cube).
 
-enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC }
+enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL }
 
-const SX := 10        # footprint width  (x)
-const SZ := 10        # footprint depth  (z)
+const SX := 16        # footprint width  (x)  — RTS-scale map
+const SZ := 16        # footprint depth  (z)
 const SY := 9         # total height     (y, up)
 const GROUND := 4     # top solid layer (y = 0..GROUND are solid by default)
-# Underground treasure budget. Tiers escalate: Gold → +1 energy, Crystal → +2
-# energy + draw a card, Relic → random upgrade card straight into the hand.
-const GOLD_POCKETS := 14
-const CRYSTAL_POCKETS := 6
-const RELIC_POCKETS := 2
+# Underground treasure budget — tier counts scale roughly with map area.
+# Gold → +1 energy, Crystal → +2 energy + 1 card, Relic → random upgrade card.
+# Oil is a stockpiled strategic resource (accumulates, unlocks advanced gear).
+const GOLD_POCKETS := 32
+const CRYSTAL_POCKETS := 12
+const RELIC_POCKETS := 4
+const OIL_POCKETS := 16
 
 var cells := {}                 # Vector3i -> Mat (non-air only)
 var cube_nodes := {}            # Vector3i -> MeshInstance3D
@@ -40,6 +42,7 @@ func _build_materials() -> void:
 	_mats[Mat.WATER] = _make_mat(Color(0.25, 0.5, 0.85))
 	_mats[Mat.CRYSTAL] = _make_mat(Color(0.45, 0.78, 1.00))
 	_mats[Mat.RELIC] = _make_mat(Color(0.82, 0.38, 0.95))
+	_mats[Mat.OIL] = _make_mat(Color(0.15, 0.12, 0.08))
 
 func _make_mat(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -63,6 +66,10 @@ func generate() -> void:
 	for i in RELIC_POCKETS:
 		var p := Vector3i(randi() % SX, randi() % GROUND, randi() % SZ)
 		cells[p] = Mat.RELIC
+	for i in OIL_POCKETS:
+		# Oil sits deeper than other treasures — you have to dig for it.
+		var p := Vector3i(randi() % SX, randi() % (GROUND - 1), randi() % SZ)
+		cells[p] = Mat.OIL
 
 # ---------------------------------------------------------------- queries
 
@@ -74,7 +81,7 @@ func material_at(p: Vector3i) -> int:
 
 func is_solid(p: Vector3i) -> bool:
 	var m: int = material_at(p)
-	return m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC
+	return m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC or m == Mat.OIL
 
 func is_air(p: Vector3i) -> bool:
 	return in_bounds(p) and material_at(p) == Mat.AIR
@@ -107,7 +114,7 @@ func center() -> Vector3:
 # Remove a solid cell; returns the material that was there (for bonuses).
 func dig_cell(p: Vector3i) -> int:
 	var m: int = material_at(p)
-	if m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC:
+	if m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC or m == Mat.OIL:
 		set_material(p, Mat.AIR)
 	return m
 

@@ -67,6 +67,10 @@ const ZOOM_MIN := 0.5
 const ZOOM_MAX := 2.2
 const ZOOM_STEP := 1.12
 
+# Camera pan: middle-mouse drag, or WASD / arrow keys.
+var _panning: bool = false
+const PAN_SPEED := 720.0   # screen-pixels per second at zoom 1.0
+
 # Level viewer: cubes at view_level are fully opaque. Layers BELOW fade modestly
 # (depth cue, still solid). Layers ABOVE render as WIREFRAME ONLY — only the
 # cube edges are drawn, so you see right through them to ops on the focal
@@ -126,6 +130,7 @@ func _ready() -> void:
 	_mat_colors[VoxelWorld.Mat.WATER] = Color(0.28, 0.55, 0.85)
 	_mat_colors[VoxelWorld.Mat.CRYSTAL] = Color(0.45, 0.78, 1.00)
 	_mat_colors[VoxelWorld.Mat.RELIC] = Color(0.82, 0.38, 0.95)
+	_mat_colors[VoxelWorld.Mat.OIL] = Color(0.15, 0.12, 0.08)
 
 	gs = GameState.new()
 	gs.setup(world)
@@ -355,6 +360,20 @@ func _on_spade_thrown(from_g: Vector3i, to_g: Vector3i, boomerang: bool) -> void
 	})
 
 func _process(delta: float) -> void:
+	# Keyboard pan: WASD or arrow keys. Speed is in screen pixels (independent
+	# of zoom so the map feels equally responsive zoomed in or out).
+	var pan := Vector2.ZERO
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		pan.y += 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		pan.y -= 1.0
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		pan.x += 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		pan.x -= 1.0
+	if pan != Vector2.ZERO:
+		position += pan * PAN_SPEED * delta
+		queue_redraw()
 	# Earthquake bounce: advance time until the quake settles, then clear.
 	if _quake_t < QUAKE_DUR:
 		_quake_t += delta
@@ -467,7 +486,12 @@ func _diamond(center: Vector2, hw: float, hh: float) -> PackedVector2Array:
 # ---------------------------------------------------------------- input / picking
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_MIDDLE:
+			_panning = event.pressed
+			return
+		if not event.pressed:
+			return
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
 				_on_click(get_local_mouse_position())
@@ -483,6 +507,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					_set_view_level(view_level - 1)
 				else:
 					_zoom_at(event.position, 1.0 / ZOOM_STEP)
+	elif event is InputEventMouseMotion and _panning:
+		# Drag-pan: move the Node2D so the world tracks the cursor.
+		position += event.relative
+		queue_redraw()
 
 # Zoom around the mouse position so the world point under the cursor stays put.
 func _zoom_at(mouse_screen: Vector2, factor: float) -> void:
@@ -806,8 +834,9 @@ func _refresh_info() -> void:
 		var held := "spade" if u.spade != null else "no spade"
 		who = "%s  HP %d/%d  (%s)" % [u.kind, u.hp, u.max_hp, held]
 	var team_label := "PLAYER" if gs.active_team == GameState.TEAM_PLAYER else "ENEMY"
-	info_label.text = "Turn %d   %s   Energy %d/%d   Selected: %s   [mode: %s]" % \
-		[gs.turn, team_label, gs.energy, GameState.MAX_ENERGY, who, mode if mode != "" else "—"]
+	info_label.text = "Turn %d   %s   Energy %d/%d   Oil %d   Selected: %s   [mode: %s]" % \
+		[gs.turn, team_label, gs.energy, GameState.MAX_ENERGY,
+			int(gs.oil[GameState.TEAM_PLAYER]), who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
 		end_turn_btn.disabled = gs.is_over or _ai_running or gs.active_team != GameState.TEAM_PLAYER
 

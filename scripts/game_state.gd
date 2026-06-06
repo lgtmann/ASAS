@@ -83,6 +83,10 @@ var active_team: int = TEAM_PLAYER
 var sim_mode: bool = false
 var is_over: bool = false
 
+# Stockpiled strategic resources (per team). Oil unlocks advanced cards later.
+# Energy is still per-turn — these are persistent banks that fill over time.
+var oil: Array = [0, 0]   # oil[team] = barrels in the bank
+
 # ---------------------------------------------------------------- setup
 
 func setup(w) -> void:
@@ -91,21 +95,22 @@ func setup(w) -> void:
 func start() -> void:
 	randomize()
 	_build_deck()
-	# Player side: leader + one starting spaded operator (matches the enemy's
-	# initial threat so turn 1 is immediately tactical).
+	# Player base in one corner, enemy base across the map — RTS-scale spacing
+	# so the early game is exploration / build-up before contact.
 	var leader = _spawn_unit(0, world.surface_cell(2, 2), false)
 	leader.kind = "leader"
 	leader.hp = 8
 	leader.max_hp = 8
 	_spawn_unit(0, world.surface_cell(3, 2), true)
 	_spawn_unit(0, world.surface_cell(2, 3), true)
-	# Enemy side: leader + two spade operators (symmetric for a fair fight).
-	var enemy_leader = _spawn_unit(1, world.surface_cell(7, 7), false)
+	var ex: int = world.SX - 3
+	var ez: int = world.SZ - 3
+	var enemy_leader = _spawn_unit(1, world.surface_cell(ex, ez), false)
 	enemy_leader.kind = "leader"
 	enemy_leader.hp = 8
 	enemy_leader.max_hp = 8
-	_spawn_unit(1, world.surface_cell(6, 7), true)
-	_spawn_unit(1, world.surface_cell(7, 6), true)
+	_spawn_unit(1, world.surface_cell(ex - 1, ez), true)
+	_spawn_unit(1, world.surface_cell(ex, ez - 1), true)
 	selected = leader
 	recompute_vision()
 	begin_turn()
@@ -844,6 +849,10 @@ func _treasure_reward(mat: int) -> String:
 		VoxelWorld.Mat.RELIC:
 			var added: Dictionary = _add_random_upgrade_to_hand()
 			return "RELIC! (+%s card)" % String(added.get("title", "upgrade"))
+		VoxelWorld.Mat.OIL:
+			# Stockpiled barrels, not instant energy — accumulates per team.
+			oil[active_team] += 1
+			return "Oil (+1 barrel, bank=%d)" % oil[active_team]
 	return ""
 
 func _draw_one_card() -> bool:
