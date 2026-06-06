@@ -76,6 +76,10 @@ const PAN_SPEED := 720.0   # screen-pixels per second at zoom 1.0
 # cube edges are drawn, so you see right through them to ops on the focal
 # level. Units render at full alpha regardless, so an op on any layer reads.
 var view_level: int = VoxelWorld.GROUND
+# Last cube-level we auto-followed the selected unit to. Lets us re-sync the
+# view ONLY when the unit's y changes (so Level +/- buttons still work the
+# rest of the time without snapping back).
+var _last_selected_level: int = -999
 const FADE_BELOW := 0.32                # one+ levels below focal
 const FOG_COLOR := Color(0.66, 0.66, 0.70)   # unseen cube color
 const WIRE_ALPHA := 0.55                # outline strength for above-focal cubes
@@ -616,10 +620,8 @@ func _act_on(cell) -> void:
 
 func _select(u) -> void:
 	mode = "move" if (u != null and u.team == 0) else ""
-	if u != null:
-		view_level = clampi(u.grid.y - 1, 0, VoxelWorld.SY - 1)
-		_refresh_level_label()
-	gs.select(u)        # emits changed -> _on_changed
+	# view_level auto-syncs via _on_changed (called by gs.select → changed.emit).
+	gs.select(u)
 
 func _set_mode(m: String) -> void:
 	mode = m
@@ -639,6 +641,17 @@ func _targets_for_mode() -> Array:
 	return []
 
 func _on_changed() -> void:
+	# Auto-follow the selected unit's level: snap view_level whenever their y
+	# changes (initial select, move_to, dig descent, …). Level +/- still works
+	# while a unit's level is steady, because we only sync on a CHANGE.
+	if gs.selected != null:
+		var u_level: int = clampi(gs.selected.grid.y - 1, 0, VoxelWorld.SY - 1)
+		if u_level != _last_selected_level:
+			_last_selected_level = u_level
+			view_level = u_level
+			_refresh_level_label()
+	else:
+		_last_selected_level = -999
 	targets = _targets_for_mode()
 	_refresh_context()
 	_refresh_info()
