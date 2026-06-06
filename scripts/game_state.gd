@@ -86,6 +86,7 @@ var is_over: bool = false
 # Stockpiled strategic resources (per team). Oil unlocks advanced cards later.
 # Energy is still per-turn — these are persistent banks that fill over time.
 var oil: Array = [0, 0]   # oil[team] = barrels in the bank
+var wood: Array = [0, 0]  # wood[team] = logs in the bank (chopped trees)
 
 # ---------------------------------------------------------------- setup
 
@@ -414,14 +415,19 @@ func move_targets(u) -> Array:
 	return out
 
 func dig_targets(u) -> Array:
-	# Any of the 6 cardinal neighbours that's a solid tile.
+	# Dig works on dirt-like solids (EARTH/GOLD/CRYSTAL/RELIC/OIL). Trees and
+	# boulders are obstacles — chop those with Swing, not Dig (no dirt to move).
 	if u == null or u.spade == null or u.acted:
 		return []
 	var out := []
 	for d in CARDINAL_6:
 		var p: Vector3i = u.grid + d
-		if world.is_solid(p):
-			out.append(p)
+		if not world.is_solid(p):
+			continue
+		var m: int = world.material_at(p)
+		if m == VoxelWorld.Mat.TREE or m == VoxelWorld.Mat.STONE:
+			continue
+		out.append(p)
 	return out
 
 func swing_targets(u) -> Array:
@@ -525,7 +531,13 @@ func combo_validate(cards: Array) -> Dictionary:
 			return {"valid": false, "reason": "Operator upgrades need an Operator card."}
 	if cost > energy:
 		return {"valid": false, "reason": "Not enough energy (%d / %d)." % [cost, energy]}
-	return {"valid": true, "total_cost": cost, "is_spade_only": op_count == 0}
+	# Shaft upgrades require lumber to craft (1 wood per shaft card).
+	var wood_cost: int = shaft
+	if wood_cost > wood[TEAM_PLAYER]:
+		return {"valid": false, "reason":
+			"Need %d wood for shaft (you have %d)." % [wood_cost, wood[TEAM_PLAYER]]}
+	return {"valid": true, "total_cost": cost, "wood_cost": wood_cost,
+			"is_spade_only": op_count == 0}
 
 func combo_targets(cards: Array) -> Array:
 	var v: Dictionary = combo_validate(cards)
@@ -568,6 +580,7 @@ func play_combo_at(cards: Array, target_cell: Vector3i) -> bool:
 		notice.emit("Pick a standable, empty tile.")
 		return false
 	energy -= int(v["total_cost"])
+	wood[TEAM_PLAYER] -= int(v.get("wood_cost", 0))
 	var op = _spawn_unit(TEAM_PLAYER, target_cell, false)
 	op.kind = "operator"
 	# Spade card (if included) attaches before slot upgrades.
@@ -595,6 +608,7 @@ func _play_spade_only_combo(cards: Array, target_cell: Vector3i, v: Dictionary) 
 		notice.emit("Spade needs an empty tile or a spadeless operator.")
 		return false
 	energy -= int(v["total_cost"])
+	wood[TEAM_PLAYER] -= int(v.get("wood_cost", 0))
 	var s := Spade.new()
 	# Apply slot upgrades to the freshly-made spade.
 	for c in cards:
@@ -853,6 +867,9 @@ func _treasure_reward(mat: int) -> String:
 			# Stockpiled barrels, not instant energy — accumulates per team.
 			oil[active_team] += 1
 			return "Oil (+1 barrel, bank=%d)" % oil[active_team]
+		VoxelWorld.Mat.TREE:
+			wood[active_team] += 1
+			return "Chopped tree (+1 wood, bank=%d)" % wood[active_team]
 	return ""
 
 func _draw_one_card() -> bool:
@@ -986,7 +1003,9 @@ func swing_at(u, cell: Vector3i) -> void:
 		var m: int = world.dig_cell(cell)
 		var reward: String = _treasure_reward(m)
 		if reward != "":
-			notice.emit("Cleared a wall — " + reward)
+			notice.emit(reward)
+		elif m == VoxelWorld.Mat.STONE:
+			notice.emit("Smashed a boulder.")
 		else:
 			notice.emit("Cleared the cell.")
 	else:

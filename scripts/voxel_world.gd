@@ -5,7 +5,7 @@ extends Node3D
 # absent from `cells`. Owns the cube meshes and exposes queries/mutations the
 # game logic uses (dig, clear, walkability). World units == grid units (1 cube).
 
-enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL }
+enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE }
 
 const SX := 16        # footprint width  (x)  — RTS-scale map
 const SZ := 16        # footprint depth  (z)
@@ -18,6 +18,8 @@ const GOLD_POCKETS := 32
 const CRYSTAL_POCKETS := 12
 const RELIC_POCKETS := 4
 const OIL_POCKETS := 16
+const STONE_PIECES := 6        # surface boulders (+1 height)
+const TREE_PIECES := 12        # surface trees (chop for +1 wood)
 
 var cells := {}                 # Vector3i -> Mat (non-air only)
 var cube_nodes := {}            # Vector3i -> MeshInstance3D
@@ -43,6 +45,8 @@ func _build_materials() -> void:
 	_mats[Mat.CRYSTAL] = _make_mat(Color(0.45, 0.78, 1.00))
 	_mats[Mat.RELIC] = _make_mat(Color(0.82, 0.38, 0.95))
 	_mats[Mat.OIL] = _make_mat(Color(0.15, 0.12, 0.08))
+	_mats[Mat.STONE] = _make_mat(Color(0.55, 0.55, 0.58))
+	_mats[Mat.TREE] = _make_mat(Color(0.30, 0.45, 0.22))
 
 func _make_mat(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -70,6 +74,34 @@ func generate() -> void:
 		# Oil sits deeper than other treasures — you have to dig for it.
 		var p := Vector3i(randi() % SX, randi() % (GROUND - 1), randi() % SZ)
 		cells[p] = Mat.OIL
+	# Surface boulders + trees at y = GROUND + 1, skipping the base zones so
+	# we don't crush starting units inside a tree.
+	for i in STONE_PIECES:
+		var x: int = randi() % SX
+		var z: int = randi() % SZ
+		if _is_safe_zone(x, z):
+			continue
+		var p := Vector3i(x, GROUND + 1, z)
+		if cells.has(p):
+			continue
+		cells[p] = Mat.STONE
+	for i in TREE_PIECES:
+		var x: int = randi() % SX
+		var z: int = randi() % SZ
+		if _is_safe_zone(x, z):
+			continue
+		var p := Vector3i(x, GROUND + 1, z)
+		if cells.has(p):
+			continue
+		cells[p] = Mat.TREE
+
+func _is_safe_zone(x: int, z: int) -> bool:
+	# 5x5 buffer around each starting base corner.
+	if x <= 4 and z <= 4:
+		return true
+	if x >= SX - 5 and z >= SZ - 5:
+		return true
+	return false
 
 # ---------------------------------------------------------------- queries
 
@@ -81,7 +113,8 @@ func material_at(p: Vector3i) -> int:
 
 func is_solid(p: Vector3i) -> bool:
 	var m: int = material_at(p)
-	return m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC or m == Mat.OIL
+	return m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC \
+			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE
 
 func is_air(p: Vector3i) -> bool:
 	return in_bounds(p) and material_at(p) == Mat.AIR
@@ -114,7 +147,8 @@ func center() -> Vector3:
 # Remove a solid cell; returns the material that was there (for bonuses).
 func dig_cell(p: Vector3i) -> int:
 	var m: int = material_at(p)
-	if m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC or m == Mat.OIL:
+	if m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC \
+			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE:
 		set_material(p, Mat.AIR)
 	return m
 

@@ -139,6 +139,8 @@ func _ready() -> void:
 	_mat_colors[VoxelWorld.Mat.CRYSTAL] = Color(0.45, 0.78, 1.00)
 	_mat_colors[VoxelWorld.Mat.RELIC] = Color(0.82, 0.38, 0.95)
 	_mat_colors[VoxelWorld.Mat.OIL] = Color(0.15, 0.12, 0.08)
+	_mat_colors[VoxelWorld.Mat.STONE] = Color(0.55, 0.55, 0.58)
+	_mat_colors[VoxelWorld.Mat.TREE] = Color(0.30, 0.45, 0.22)
 
 	gs = GameState.new()
 	gs.setup(world)
@@ -881,9 +883,11 @@ func _refresh_info() -> void:
 		var held := "spade" if u.spade != null else "no spade"
 		who = "%s  HP %d/%d  (%s)" % [u.kind, u.hp, u.max_hp, held]
 	var team_label := "PLAYER" if gs.active_team == GameState.TEAM_PLAYER else "ENEMY"
-	info_label.text = "Turn %d   %s   Energy %d/%d   Oil %d   Selected: %s   [mode: %s]" % \
+	info_label.text = "Turn %d   %s   Energy %d/%d   Oil %d   Wood %d   Selected: %s   [mode: %s]" % \
 		[gs.turn, team_label, gs.energy, GameState.MAX_ENERGY,
-			int(gs.oil[GameState.TEAM_PLAYER]), who, mode if mode != "" else "—"]
+			int(gs.oil[GameState.TEAM_PLAYER]),
+			int(gs.wood[GameState.TEAM_PLAYER]),
+			who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
 		end_turn_btn.disabled = gs.is_over or _ai_running or gs.active_team != GameState.TEAM_PLAYER
 
