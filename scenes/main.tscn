@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://g45oitx2jc6l"]
+
+[ext_resource type="Script" uid="uid://bsrk1vkeblx8r" path="res://scripts/iso_view.gd" id="1_iso"]
+
+[node name="MainIso" type="Node2D"]
+script = ExtResource("1_iso")
