@@ -90,6 +90,18 @@ const FOG_COLOR := Color(0.66, 0.66, 0.70)   # unseen cube color
 const WIRE_ALPHA := 0.55                # outline strength for above-focal cubes
 const WIRE_WIDTH := 1.4                 # outline thickness for wireframe cubes
 
+# --- Sub-cube rendering ------------------------------------------------------
+# Each logical cell renders as a 3x3x2 grid of 18 sub-cubes. Game logic stays
+# per-cell; this is a pure visual subdivision so cells can carry richer
+# geometry (tree trunk + canopy, boulder cluster) and random surface divots.
+const SUB_X := 3
+const SUB_Y := 2
+const SUB_Z := 3
+const TRUNK_COLOR := Color(0.42, 0.28, 0.17)
+const CANOPY_COLOR := Color(0.31, 0.55, 0.24)
+const FULL_PATTERN := (1 << 18) - 1            # all 18 sub-cubes filled
+var _sub_draw_order: Array = []                # filled in _ready
+
 # Filled in _ready (enum values aren't constexpr for a const dict).
 var _mat_colors := {}
 
@@ -133,6 +145,7 @@ func _ready() -> void:
 	world = VoxelWorld.new()
 	world.skip_3d_rendering = true
 	add_child(world)
+	_sub_draw_order = _compute_sub_draw_order()
 
 	_mat_colors[VoxelWorld.Mat.EARTH] = Color(0.55, 0.40, 0.26)
 	_mat_colors[VoxelWorld.Mat.GOLD] = Color(0.96, 0.78, 0.20)
@@ -230,47 +243,125 @@ func _level_alpha(y: int) -> float:
 	return 0.0   # never used; far-above cubes early-out into the wireframe path
 
 func _draw_cube(c: Vector3i, alpha: float) -> void:
-	var shake := Vector2(0, _quake_offset(c))
-	var p010 := iso(c + Vector3i(0, 1, 0)) + shake
-	var p110 := iso(c + Vector3i(1, 1, 0)) + shake
-	var p111 := iso(c + Vector3i(1, 1, 1)) + shake
-	var p011 := iso(c + Vector3i(0, 1, 1)) + shake
-	var p100 := iso(c + Vector3i(1, 0, 0)) + shake
-	var p101 := iso(c + Vector3i(1, 0, 1)) + shake
-	var p001 := iso(c + Vector3i(0, 0, 1)) + shake
 	var seen_it: bool = gs.seen.has(c)
-	var base_col: Color
-	if seen_it:
-		var mat: int = world.material_at(c)
-		base_col = _mat_colors.get(mat, Color(0.5, 0.5, 0.5))
-	else:
-		base_col = FOG_COLOR
-
-	# Cubes >1 level above the focal layer render as wireframe only — see-through
-	# to ops below. The level just above focal (surface protrusions like trees
-	# / boulders when you're on the ground) renders solid via the normal path.
+	var mat: int = world.material_at(c)
+	# Cubes >1 level above the focal layer wireframe (single cube outline so
+	# the see-through cage doesn't get visually noisy).
 	if c.y > view_level + 1:
+		var base_col: Color = (FOG_COLOR if not seen_it
+				else _mat_colors.get(mat, Color(0.5, 0.5, 0.5)))
 		var wire_col := Color(base_col.r, base_col.g, base_col.b, WIRE_ALPHA)
-		draw_polyline(PackedVector2Array([p010, p110, p111, p011, p010]), wire_col, WIRE_WIDTH)
-		draw_polyline(PackedVector2Array([p100, p110, p111, p101, p100]), wire_col, WIRE_WIDTH)
-		draw_polyline(PackedVector2Array([p001, p011, p111, p101, p001]), wire_col, WIRE_WIDTH)
+		var w010 := iso(c + Vector3i(0, 1, 0))
+		var w110 := iso(c + Vector3i(1, 1, 0))
+		var w111 := iso(c + Vector3i(1, 1, 1))
+		var w011 := iso(c + Vector3i(0, 1, 1))
+		var w100 := iso(c + Vector3i(1, 0, 0))
+		var w101 := iso(c + Vector3i(1, 0, 1))
+		var w001 := iso(c + Vector3i(0, 0, 1))
+		draw_polyline(PackedVector2Array([w010, w110, w111, w011, w010]), wire_col, WIRE_WIDTH)
+		draw_polyline(PackedVector2Array([w100, w110, w111, w101, w100]), wire_col, WIRE_WIDTH)
+		draw_polyline(PackedVector2Array([w001, w011, w111, w101, w001]), wire_col, WIRE_WIDTH)
 		return
 
-	# Solid render for at-focal and below-focal cubes.
+	# Solid path: render this cell as a 3x3x2 grid of sub-cubes. Pattern is
+	# deterministic from (c, mat) so the same cell looks the same every frame.
+	var shake := Vector2(0, _quake_offset(c))
+	var pattern: int = _cell_pattern(c, mat)
+	for sub: Vector3i in _sub_draw_order:
+		if not _sub_filled(pattern, sub.x, sub.y, sub.z):
+			continue
+		_draw_sub_cube(c, sub.x, sub.y, sub.z, alpha, pattern, mat, seen_it, shake)
+
+# Pre-sorted 18-cell draw order: back-to-front by (sx + sz), then by sy
+# ascending so stacked sub-cubes paint correctly within a cell.
+func _compute_sub_draw_order() -> Array:
+	var arr: Array = []
+	for sy in SUB_Y:
+		for sz in SUB_Z:
+			for sx in SUB_X:
+				arr.append(Vector3i(sx, sy, sz))
+	arr.sort_custom(func(a, b):
+		if (a.x + a.z) != (b.x + b.z):
+			return (a.x + a.z) < (b.x + b.z)
+		if a.y != b.y:
+			return a.y < b.y
+		return a.x < b.x)
+	return arr
+
+# Iso projection of a sub-cube corner. Sub-cube (sx, sy, sz) in cell c spans
+# fractional coords [sx/3, (sx+1)/3] × [sy/2, (sy+1)/2] × [sz/3, (sz+1)/3].
+# dx/dy/dz are 0 or 1 (which of the 8 corners).
+func _sub_iso(c: Vector3i, sx: int, sy: int, sz: int, dx: int, dy: int, dz: int) -> Vector2:
+	return iso_pt(
+		float(c.x) + float(sx + dx) / float(SUB_X),
+		float(c.y) + float(sy + dy) / float(SUB_Y),
+		float(c.z) + float(sz + dz) / float(SUB_Z))
+
+func _sub_filled(pattern: int, sx: int, sy: int, sz: int) -> bool:
+	if sx < 0 or sx >= SUB_X or sy < 0 or sy >= SUB_Y or sz < 0 or sz >= SUB_Z:
+		return false
+	return ((pattern >> (sx + sz * SUB_X + sy * SUB_X * SUB_Z)) & 1) == 1
+
+# Deterministic 18-bit fill-mask per cell. TREE = thin trunk + full canopy.
+# STONE = irregular cluster. Everything else = mostly full with the occasional
+# random sub-cube divot for non-flat surface feel.
+func _cell_pattern(c: Vector3i, mat: int) -> int:
+	if mat == VoxelWorld.Mat.TREE:
+		# sy=0: only sub (sx=1, sz=1) filled → bit 1+1*3+0*9 = 4
+		# sy=1: all 9 sub-cubes filled → bits 9..17
+		return (1 << 4) | (0x1FF << 9)
+	if mat == VoxelWorld.Mat.STONE:
+		var p: int = FULL_PATTERN
+		var seed: int = (c.x * 73 + c.z * 31 + c.y * 11) & 0xFFFF
+		for i in range(5):
+			var bit: int = ((seed >> i) ^ (c.y * 7 + i * 19)) & 0xF
+			bit = bit % 18
+			p &= ~(1 << bit)
+		return p
+	# Dirt-like materials: 12% chance one random sub-cube is missing so the
+	# surface isn't perfectly flat.
+	var s: int = (c.x * 73 + c.z * 31 + c.y * 7) % 100
+	if s < 12:
+		var which: int = (c.x * 17 + c.z * 5 + c.y * 3) % 18
+		return FULL_PATTERN & ~(1 << which)
+	return FULL_PATTERN
+
+# Per-sub-cube colour. Trees colour their center column (sx=1, sz=1) as brown
+# trunk and the surrounding sub-cubes as green canopy.
+func _sub_base_color(mat: int, sx: int, sy: int, sz: int, seen: bool) -> Color:
+	if not seen:
+		return FOG_COLOR
+	if mat == VoxelWorld.Mat.TREE:
+		if sx == 1 and sz == 1:
+			return TRUNK_COLOR
+		return CANOPY_COLOR
+	return _mat_colors.get(mat, Color(0.5, 0.5, 0.5))
+
+func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
+		pattern: int, mat: int, seen: bool, shake: Vector2) -> void:
+	var p010 := _sub_iso(c, sx, sy, sz, 0, 1, 0) + shake
+	var p110 := _sub_iso(c, sx, sy, sz, 1, 1, 0) + shake
+	var p111 := _sub_iso(c, sx, sy, sz, 1, 1, 1) + shake
+	var p011 := _sub_iso(c, sx, sy, sz, 0, 1, 1) + shake
+	var p100 := _sub_iso(c, sx, sy, sz, 1, 0, 0) + shake
+	var p101 := _sub_iso(c, sx, sy, sz, 1, 0, 1) + shake
+	var p001 := _sub_iso(c, sx, sy, sz, 0, 0, 1) + shake
+	var base_col: Color = _sub_base_color(mat, sx, sy, sz, seen)
 	var top_col := base_col
 	top_col.a = alpha
 	var right_col := top_col.darkened(0.22)
 	right_col.a = alpha
 	var left_col := top_col.darkened(0.42)
 	left_col.a = alpha
-	# Three visible faces: top + +X (right) + +Z (left/front).
-	draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
-	draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
-	draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
-	var outline := Color(0, 0, 0, 0.25 * alpha)
-	draw_polyline(PackedVector2Array([p010, p110, p111, p011, p010]), outline, 1.0)
-	draw_polyline(PackedVector2Array([p100, p110, p111, p101, p100]), outline, 1.0)
-	draw_polyline(PackedVector2Array([p001, p011, p111, p101, p001]), outline, 1.0)
+	# Top face: visible if there's no filled sub above.
+	if sy == SUB_Y - 1 or not _sub_filled(pattern, sx, sy + 1, sz):
+		draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
+	# +X face: visible if no sub to the right within the cell.
+	if sx == SUB_X - 1 or not _sub_filled(pattern, sx + 1, sy, sz):
+		draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
+	# +Z face: visible if no sub to the front within the cell.
+	if sz == SUB_Z - 1 or not _sub_filled(pattern, sx, sy, sz + 1):
+		draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
 
 func _draw_highlight(c: Vector3i) -> void:
 	# Wireframe diamond on the visible surface for cell `c`. For air cells we
