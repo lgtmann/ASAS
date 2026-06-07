@@ -91,15 +91,15 @@ const WIRE_ALPHA := 0.55                # outline strength for above-focal cubes
 const WIRE_WIDTH := 1.4                 # outline thickness for wireframe cubes
 
 # --- Sub-cube rendering ------------------------------------------------------
-# Each logical cell renders as a 3x3x2 grid of 18 sub-cubes. Game logic stays
+# Each logical cell renders as a 3x3x4 grid of 36 sub-cubes. Game logic stays
 # per-cell; this is a pure visual subdivision so cells can carry richer
-# geometry (tree trunk + canopy, boulder cluster) and random surface divots.
+# geometry (tree stump + canopy, boulder cluster) and random surface divots.
 const SUB_X := 3
-const SUB_Y := 2
+const SUB_Y := 4               # bottom 3 layers = tree stump, top layer = leaves
 const SUB_Z := 3
 const TRUNK_COLOR := Color(0.42, 0.28, 0.17)
 const CANOPY_COLOR := Color(0.31, 0.55, 0.24)
-const FULL_PATTERN := (1 << 18) - 1            # all 18 sub-cubes filled
+const FULL_PATTERN := (1 << 36) - 1            # all 36 sub-cubes filled
 var _sub_draw_order: Array = []                # filled in _ready
 
 # Filled in _ready (enum values aren't constexpr for a const dict).
@@ -302,39 +302,40 @@ func _sub_filled(pattern: int, sx: int, sy: int, sz: int) -> bool:
 		return false
 	return ((pattern >> (sx + sz * SUB_X + sy * SUB_X * SUB_Z)) & 1) == 1
 
-# Deterministic 18-bit fill-mask per cell. TREE = thin trunk + full canopy.
-# STONE = irregular cluster. Everything else = mostly full with the occasional
-# random sub-cube divot for non-flat surface feel.
+# Deterministic 36-bit fill-mask per cell. TREE = solid box (colour decides
+# stump vs leaves layer). STONE = irregular cluster. Other dirt-like
+# materials = mostly full with the occasional random sub-cube divot.
 func _cell_pattern(c: Vector3i, mat: int) -> int:
 	if mat == VoxelWorld.Mat.TREE:
-		# sy=0: only sub (sx=1, sz=1) filled → bit 1+1*3+0*9 = 4
-		# sy=1: all 9 sub-cubes filled → bits 9..17
-		return (1 << 4) | (0x1FF << 9)
+		# All 36 sub-cubes filled; bottom 3 sub-layers paint brown (stump) and
+		# the top layer paints green (leaves) — see _sub_base_color.
+		return FULL_PATTERN
 	if mat == VoxelWorld.Mat.STONE:
 		var p: int = FULL_PATTERN
 		var seed: int = (c.x * 73 + c.z * 31 + c.y * 11) & 0xFFFF
-		for i in range(5):
-			var bit: int = ((seed >> i) ^ (c.y * 7 + i * 19)) & 0xF
-			bit = bit % 18
+		# Drop ~10 sub-cubes for craggy, irregular boulders.
+		for i in range(10):
+			var bit: int = ((seed >> i) ^ (c.y * 7 + i * 19)) & 0xFF
+			bit = bit % (SUB_X * SUB_Y * SUB_Z)
 			p &= ~(1 << bit)
 		return p
-	# Dirt-like materials: 12% chance one random sub-cube is missing so the
+	# Dirt-like materials: ~12% of cells lose one random sub-cube so the
 	# surface isn't perfectly flat.
 	var s: int = (c.x * 73 + c.z * 31 + c.y * 7) % 100
 	if s < 12:
-		var which: int = (c.x * 17 + c.z * 5 + c.y * 3) % 18
+		var which: int = (c.x * 17 + c.z * 5 + c.y * 3) % (SUB_X * SUB_Y * SUB_Z)
 		return FULL_PATTERN & ~(1 << which)
 	return FULL_PATTERN
 
-# Per-sub-cube colour. Trees colour their center column (sx=1, sz=1) as brown
-# trunk and the surrounding sub-cubes as green canopy.
+# Per-sub-cube colour. Trees use the bottom 3 sub-layers as brown stump and
+# the top sub-layer as the green leaves crown.
 func _sub_base_color(mat: int, sx: int, sy: int, sz: int, seen: bool) -> Color:
 	if not seen:
 		return FOG_COLOR
 	if mat == VoxelWorld.Mat.TREE:
-		if sx == 1 and sz == 1:
-			return TRUNK_COLOR
-		return CANOPY_COLOR
+		if sy >= SUB_Y - 1:
+			return CANOPY_COLOR
+		return TRUNK_COLOR
 	return _mat_colors.get(mat, Color(0.5, 0.5, 0.5))
 
 func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
