@@ -307,9 +307,13 @@ func _sub_filled(pattern: int, sx: int, sy: int, sz: int) -> bool:
 # materials = mostly full with the occasional random sub-cube divot.
 func _cell_pattern(c: Vector3i, mat: int) -> int:
 	if mat == VoxelWorld.Mat.TREE:
-		# All 36 sub-cubes filled; bottom 3 sub-layers paint brown (stump) and
-		# the top layer paints green (leaves) — see _sub_base_color.
-		return FULL_PATTERN
+		# Slim trunk — only the center sub-cube (sx=1, sz=1) of the lower 3
+		# sub-layers is filled — topped by a full 3x3 canopy on the top sub-layer.
+		var p: int = 0
+		for sy in range(SUB_Y - 1):
+			p |= 1 << (1 + 1 * SUB_X + sy * SUB_X * SUB_Z)
+		p |= 0x1FF << ((SUB_Y - 1) * SUB_X * SUB_Z)
+		return p
 	if mat == VoxelWorld.Mat.STONE:
 		var p: int = FULL_PATTERN
 		var seed: int = (c.x * 73 + c.z * 31 + c.y * 11) & 0xFFFF

@@ -27,6 +27,10 @@ var cubes_root: Node3D
 var _box: BoxMesh
 var _mats := {}                 # Mat -> StandardMaterial3D
 var skip_3d_rendering: bool = false   # set before add_child for 2D views
+# Each water cell's local flow direction (Vector3i; cardinal +/-X / +/-Z).
+# When the river is diverted (via dig), new water cells inherit the direction
+# of the adjacent water cell they were spread from.
+var water_flow: Dictionary = {}
 
 func _ready() -> void:
 	generate()
@@ -94,6 +98,57 @@ func generate() -> void:
 		if cells.has(p):
 			continue
 		cells[p] = Mat.TREE
+	_generate_river()
+
+# Wander a river path from one random map edge to the opposite edge at the
+# standable air layer (y = GROUND + 1). Each step is biased toward the target
+# but can sidestep, so the river snakes a bit. Tree/stone cells along the way
+# get overwritten with water.
+func _generate_river() -> void:
+	water_flow.clear()
+	var y: int = GROUND + 1
+	var horiz: bool = (randi() & 1) == 1
+	var start: Vector3i
+	var end: Vector3i
+	if horiz:
+		var sz: int = randi() % SZ
+		var ez: int = randi() % SZ
+		start = Vector3i(0, y, sz)
+		end = Vector3i(SX - 1, y, ez)
+	else:
+		var sx: int = randi() % SX
+		var ex: int = randi() % SX
+		start = Vector3i(sx, y, 0)
+		end = Vector3i(ex, y, SZ - 1)
+	var cur: Vector3i = start
+	var safety: int = SX * SZ
+	while safety > 0:
+		safety -= 1
+		var step: Vector3i = _river_step(cur, end)
+		cells[cur] = Mat.WATER
+		water_flow[cur] = step
+		if cur == end:
+			break
+		cur += step
+		if not in_bounds(cur):
+			break
+
+func _river_step(cur: Vector3i, target: Vector3i) -> Vector3i:
+	var dx: int = signi(target.x - cur.x)
+	var dz: int = signi(target.z - cur.z)
+	var ax: int = absi(target.x - cur.x)
+	var az: int = absi(target.z - cur.z)
+	if ax == 0 and az == 0:
+		return Vector3i(0, 0, 1)
+	# Probability of an x-step is proportional to the remaining x distance.
+	if randf() < float(ax) / float(ax + az):
+		if dx != 0:
+			return Vector3i(dx, 0, 0)
+	if dz != 0:
+		return Vector3i(0, 0, dz)
+	if dx != 0:
+		return Vector3i(dx, 0, 0)
+	return Vector3i(0, 0, 1)
 
 func _is_safe_zone(x: int, z: int) -> bool:
 	# 5x5 buffer around each starting base corner.
@@ -119,10 +174,21 @@ func is_solid(p: Vector3i) -> bool:
 func is_air(p: Vector3i) -> bool:
 	return in_bounds(p) and material_at(p) == Mat.AIR
 
-# A cell a unit can stand in: in-bounds air with solid ground directly below
+func is_water(p: Vector3i) -> bool:
+	return in_bounds(p) and material_at(p) == Mat.WATER
+
+# A cell a unit can pass through (not solid). Air OR water — water cells are
+# walk-into-able; the current pushes you on the next end-of-turn tick.
+func is_passable(p: Vector3i) -> bool:
+	if not in_bounds(p):
+		return false
+	var m: int = material_at(p)
+	return m == Mat.AIR or m == Mat.WATER
+
+# A cell a unit can stand in: passable with solid ground directly below
 # (the floor at the very bottom counts as solid).
 func is_standable(p: Vector3i) -> bool:
-	if not is_air(p):
+	if not is_passable(p):
 		return false
 	if p.y == 0:
 		return true

@@ -358,11 +358,44 @@ func begin_turn() -> void:
 		notice.emit("Enemy turn %d…" % turn)
 
 func end_turn() -> void:
+	# Apply water current BEFORE the hand-off — units in the river drift
+	# downstream one cell, then the next team takes over.
+	_apply_water_current()
 	# Hand off to the other side; turn counter ticks when wrapping to player.
 	active_team = TEAM_ENEMY if active_team == TEAM_PLAYER else TEAM_PLAYER
 	if active_team == TEAM_PLAYER:
 		turn += 1
 	begin_turn()
+
+# Push every unit / dropped spade sitting in a water cell one step along that
+# cell's flow direction. Skips pushes that would land on another unit, fall
+# off-map (current stalls at the edge), or onto non-passable terrain.
+func _apply_water_current() -> void:
+	if world == null:
+		return
+	var pushed_units := {}
+	var moves: Array = []     # (unit, from_grid, to_grid) tuples for animation
+	for cell_v in world.water_flow.keys():
+		var cell: Vector3i = cell_v
+		var flow: Vector3i = world.water_flow[cell]
+		var dest: Vector3i = cell + flow
+		if not world.is_passable(dest):
+			continue
+		var u = unit_at(cell)
+		if u != null and not pushed_units.has(u) and unit_at(dest) == null:
+			var from_g: Vector3i = u.grid
+			u.grid = dest
+			pushed_units[u] = true
+			moves.append([u, from_g, dest])
+		for s in dropped:
+			if s.grid == cell:
+				s.grid = dest
+	# Emit animations after the iteration so we don't disturb the dict.
+	for m in moves:
+		unit_animated_move.emit(m[0], m[1], m[2])
+	if not moves.is_empty():
+		notice.emit("The current drifts %d unit(s) downstream." % moves.size())
+		_emit_changed()
 
 # ---------------------------------------------------------------- queries
 
@@ -967,6 +1000,9 @@ func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
 		if label != "":
 			rewards.append(label)
 	world.set_material(dest, VoxelWorld.Mat.EARTH)
+	# Diversion: if the just-cleared source sits next to a water cell at the
+	# same y level, the river spreads into it. Inherits flow direction.
+	_maybe_divert_water(source)
 	if not rewards.is_empty():
 		notice.emit("Dug — " + ", ".join(rewards))
 	else:
@@ -975,6 +1011,22 @@ func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
 		unit_animated_move.emit(u, dig_from, u.grid)
 	_emit_changed()
 	return true
+
+# After a dig clears `source` to AIR, see if it's cardinally adjacent to water
+# at the same y. If so, the river extends into the new cell (matching flow).
+func _maybe_divert_water(source: Vector3i) -> void:
+	if world == null:
+		return
+	if not world.is_air(source):
+		return
+	for d in DIRS:
+		var n: Vector3i = source + d
+		if world.is_water(n):
+			world.set_material(source, VoxelWorld.Mat.WATER)
+			var flow: Vector3i = world.water_flow.get(n, d)
+			world.water_flow[source] = flow
+			notice.emit("River diverted into %d,%d,%d." % [source.x, source.y, source.z])
+			return
 
 # Back-compat shim for the 3D scene's hotkey-driven dig.
 func dig(u) -> void:
