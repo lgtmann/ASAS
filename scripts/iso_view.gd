@@ -229,7 +229,33 @@ func _draw() -> void:
 		_draw_unit(u, 1.0)
 	for s in gs.dropped:
 		_draw_dropped_spade(s, 1.0)
+	_draw_flow_arrows()
 	_draw_projectiles()
+
+func _draw_flow_arrows() -> void:
+	# A small white triangle on the top face of every water cell, pointing in
+	# the local flow direction so you can read the river at a glance.
+	if world == null:
+		return
+	var arrow_col := Color(0.95, 0.97, 1.00, 0.85)
+	var outline_col := Color(0.08, 0.18, 0.30, 0.85)
+	for cell_v in world.water_flow.keys():
+		var cell: Vector3i = cell_v
+		# Top centre of the water cell's cube face.
+		var top := iso_pt(float(cell.x) + 0.5, float(cell.y + 1), float(cell.z) + 0.5)
+		var flow: Vector3i = world.water_flow[cell]
+		# Iso projection of a unit flow vector ignoring y.
+		var dir: Vector2 = Vector2(
+			(float(flow.x) - float(flow.z)) * TILE_W * 0.5,
+			(float(flow.x) + float(flow.z)) * TILE_H * 0.5).normalized()
+		if dir == Vector2.ZERO:
+			continue
+		var perp := Vector2(-dir.y, dir.x)
+		var tip: Vector2 = top + dir * 11.0
+		var b1: Vector2 = top - dir * 4.0 + perp * 5.0
+		var b2: Vector2 = top - dir * 4.0 - perp * 5.0
+		draw_colored_polygon(PackedVector2Array([tip, b1, b2]), arrow_col)
+		draw_polyline(PackedVector2Array([tip, b1, b2, tip]), outline_col, 1.0)
 
 func _level_alpha(y: int) -> float:
 	# Alpha for cubes AT or NEAR (one level above) the focal level. Cubes more
@@ -307,12 +333,17 @@ func _sub_filled(pattern: int, sx: int, sy: int, sz: int) -> bool:
 # materials = mostly full with the occasional random sub-cube divot.
 func _cell_pattern(c: Vector3i, mat: int) -> int:
 	if mat == VoxelWorld.Mat.TREE:
-		# Slim trunk — only the center sub-cube (sx=1, sz=1) of the lower 3
-		# sub-layers is filled — topped by a full 3x3 canopy on the top sub-layer.
+		# Trees stack vertically (TREE_HEIGHT cells per tree). Middle/bottom
+		# cells are pure trunk (slim brown column, all sub-layers). The TOP
+		# cell — the only one with no tree cell above it — adds a full 3×3
+		# canopy on its top sub-layer.
+		var has_tree_above: bool = world.material_at(c + Vector3i(0, 1, 0)) == VoxelWorld.Mat.TREE
 		var p: int = 0
-		for sy in range(SUB_Y - 1):
+		var trunk_layers: int = SUB_Y if has_tree_above else (SUB_Y - 1)
+		for sy in range(trunk_layers):
 			p |= 1 << (1 + 1 * SUB_X + sy * SUB_X * SUB_Z)
-		p |= 0x1FF << ((SUB_Y - 1) * SUB_X * SUB_Z)
+		if not has_tree_above:
+			p |= 0x1FF << ((SUB_Y - 1) * SUB_X * SUB_Z)
 		return p
 	if mat == VoxelWorld.Mat.STONE:
 		var p: int = FULL_PATTERN
@@ -331,13 +362,14 @@ func _cell_pattern(c: Vector3i, mat: int) -> int:
 		return FULL_PATTERN & ~(1 << which)
 	return FULL_PATTERN
 
-# Per-sub-cube colour. Trees use the bottom 3 sub-layers as brown stump and
-# the top sub-layer as the green leaves crown.
-func _sub_base_color(mat: int, sx: int, sy: int, sz: int, seen: bool) -> Color:
+# Per-sub-cube colour. Trees' bottom-and-middle cells paint pure brown trunk;
+# the TOP cell of the stack paints its top sub-layer green (canopy).
+func _sub_base_color(c: Vector3i, mat: int, sx: int, sy: int, sz: int, seen: bool) -> Color:
 	if not seen:
 		return FOG_COLOR
 	if mat == VoxelWorld.Mat.TREE:
-		if sy >= SUB_Y - 1:
+		var has_tree_above: bool = world.material_at(c + Vector3i(0, 1, 0)) == VoxelWorld.Mat.TREE
+		if not has_tree_above and sy >= SUB_Y - 1:
 			return CANOPY_COLOR
 		return TRUNK_COLOR
 	return _mat_colors.get(mat, Color(0.5, 0.5, 0.5))
@@ -351,7 +383,7 @@ func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
 	var p100 := _sub_iso(c, sx, sy, sz, 1, 0, 0) + shake
 	var p101 := _sub_iso(c, sx, sy, sz, 1, 0, 1) + shake
 	var p001 := _sub_iso(c, sx, sy, sz, 0, 0, 1) + shake
-	var base_col: Color = _sub_base_color(mat, sx, sy, sz, seen)
+	var base_col: Color = _sub_base_color(c, mat, sx, sy, sz, seen)
 	var top_col := base_col
 	top_col.a = alpha
 	var right_col := top_col.darkened(0.22)

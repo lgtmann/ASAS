@@ -31,6 +31,10 @@ var skip_3d_rendering: bool = false   # set before add_child for 2D views
 # When the river is diverted (via dig), new water cells inherit the direction
 # of the adjacent water cell they were spread from.
 var water_flow: Dictionary = {}
+# Starting cell(s) of every river — connectivity BFS uses these. If a water
+# cell can't be reached by following flow from a source, it dries to AIR.
+var water_sources: Array = []
+const TREE_HEIGHT := 3            # cells tall — bottom 2 = full trunk, top = trunk + canopy
 
 func _ready() -> void:
 	generate()
@@ -78,15 +82,16 @@ func generate() -> void:
 		# Oil sits deeper than other treasures — you have to dig for it.
 		var p := Vector3i(randi() % SX, randi() % (GROUND - 1), randi() % SZ)
 		cells[p] = Mat.OIL
-	# Surface boulders + trees at y = GROUND + 1, skipping the base zones so
-	# we don't crush starting units inside a tree.
+	# Cut the river FIRST so surface scatter can skip its columns.
+	_generate_river()
+	# Boulders sit on the surface (y = GROUND + 1). Trees are 3 cells tall.
 	for i in STONE_PIECES:
 		var x: int = randi() % SX
 		var z: int = randi() % SZ
 		if _is_safe_zone(x, z):
 			continue
 		var p := Vector3i(x, GROUND + 1, z)
-		if cells.has(p):
+		if cells.has(p) or _column_has_water(x, z):
 			continue
 		cells[p] = Mat.STONE
 	for i in TREE_PIECES:
@@ -94,11 +99,23 @@ func generate() -> void:
 		var z: int = randi() % SZ
 		if _is_safe_zone(x, z):
 			continue
-		var p := Vector3i(x, GROUND + 1, z)
-		if cells.has(p):
+		if _column_has_water(x, z):
 			continue
-		cells[p] = Mat.TREE
-	_generate_river()
+		var any_taken := false
+		for dy in TREE_HEIGHT:
+			if cells.has(Vector3i(x, GROUND + 1 + dy, z)):
+				any_taken = true
+				break
+		if any_taken:
+			continue
+		for dy in TREE_HEIGHT:
+			cells[Vector3i(x, GROUND + 1 + dy, z)] = Mat.TREE
+
+func _column_has_water(x: int, z: int) -> bool:
+	for y in range(SY):
+		if cells.get(Vector3i(x, y, z), Mat.AIR) == Mat.WATER:
+			return true
+	return false
 
 # Wander a river path from one random map edge to the opposite edge at the
 # standable air layer (y = GROUND + 1). Each step is biased toward the target
@@ -106,7 +123,10 @@ func generate() -> void:
 # get overwritten with water.
 func _generate_river() -> void:
 	water_flow.clear()
-	var y: int = GROUND + 1
+	water_sources.clear()
+	# River runs in a trench cut into the top earth layer — y = GROUND. The
+	# air above (GROUND + 1) stays open so the trench reads visually as a ditch.
+	var y: int = GROUND
 	var horiz: bool = (randi() & 1) == 1
 	var start: Vector3i
 	var end: Vector3i
@@ -120,6 +140,7 @@ func _generate_river() -> void:
 		var ex: int = randi() % SX
 		start = Vector3i(sx, y, 0)
 		end = Vector3i(ex, y, SZ - 1)
+	water_sources.append(start)
 	var cur: Vector3i = start
 	var safety: int = SX * SZ
 	while safety > 0:
@@ -132,6 +153,34 @@ func _generate_river() -> void:
 		cur += step
 		if not in_bounds(cur):
 			break
+
+# Walk the river from every source, dropping any water cell that the flow
+# graph can no longer reach. Call after any terrain change that touches water
+# (a dam, a diversion). Returns the dropped cells so the caller can notice.
+func recompute_water_flow() -> Array:
+	var live: Dictionary = {}
+	var queue: Array = []
+	for s in water_sources:
+		if is_water(s):
+			live[s] = true
+			queue.append(s)
+	while not queue.is_empty():
+		var cur: Vector3i = queue.pop_front()
+		var flow: Vector3i = water_flow.get(cur, Vector3i.ZERO)
+		if flow == Vector3i.ZERO:
+			continue
+		var nxt: Vector3i = cur + flow
+		if is_water(nxt) and not live.has(nxt):
+			live[nxt] = true
+			queue.append(nxt)
+	var dropped: Array = []
+	for cell_v in water_flow.keys():
+		var cell: Vector3i = cell_v
+		if not live.has(cell):
+			set_material(cell, Mat.AIR)
+			water_flow.erase(cell)
+			dropped.append(cell)
+	return dropped
 
 func _river_step(cur: Vector3i, target: Vector3i) -> Vector3i:
 	var dx: int = signi(target.x - cur.x)

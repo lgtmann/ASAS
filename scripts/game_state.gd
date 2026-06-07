@@ -976,6 +976,8 @@ func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
 	if not world.is_solid(source):
 		notice.emit("Source isn't a solid tile.")
 		return false
+	# Standable cells (air or water with solid below) are valid raise targets.
+	# Picking a water cell as the dest dams the river there.
 	if not (world.is_standable(dest) and unit_at(dest) == null):
 		notice.emit("Destination isn't a valid raise target.")
 		return false
@@ -999,10 +1001,19 @@ func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
 		var label: String = _treasure_reward(mat)
 		if label != "":
 			rewards.append(label)
+	var damming: bool = world.is_water(dest)
+	if damming:
+		world.water_flow.erase(dest)        # remove this cell from the river
 	world.set_material(dest, VoxelWorld.Mat.EARTH)
 	# Diversion: if the just-cleared source sits next to a water cell at the
 	# same y level, the river spreads into it. Inherits flow direction.
 	_maybe_divert_water(source)
+	# After any change involving water, prune cells no longer reachable from
+	# a source. A dam drops everything downstream.
+	if damming or world.is_water(source):
+		var drained: Array = world.recompute_water_flow()
+		if drained.size() > 0:
+			notice.emit("River dried up — %d cell(s) drained." % drained.size())
 	if not rewards.is_empty():
 		notice.emit("Dug — " + ", ".join(rewards))
 	else:
