@@ -5,6 +5,10 @@ extends Node3D
 # absent from `cells`. Owns the cube meshes and exposes queries/mutations the
 # game logic uses (dig, clear, walkability). World units == grid units (1 cube).
 
+# Fired whenever any cell's material changes. The iso_view's terrain cache
+# uses this to know when it needs to re-render.
+signal cells_changed
+
 enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE }
 
 const SX := 16        # footprint width  (x)  — RTS-scale map
@@ -275,6 +279,7 @@ func set_material(p: Vector3i, m: int) -> void:
 	else:
 		cells[p] = m
 	_refresh_cube(p)
+	cells_changed.emit()
 
 # ---------------------------------------------------------------- rendering
 

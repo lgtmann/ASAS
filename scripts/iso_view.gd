@@ -132,6 +132,16 @@ var _combo_animating: bool = false
 var ball_overlay: BallOverlay
 var _moves_in_flight: int = 0           # > 0 → queue_redraw every frame to follow lerp
 
+# Static-terrain cache. The cube grid is moved to its own child Node2D whose
+# _draw only fires when the terrain (or vision, or view level, or quake) has
+# actually changed. iso_view's own _draw handles the dynamic layer (highlights,
+# units, spades, projectiles, flow arrows) every frame as before.
+var terrain_layer: TerrainLayer
+# Drawing target redirection. _draw routes cube draw calls to whichever
+# canvas should receive them — `terrain_layer` from terrain redraws, `self`
+# from dynamic redraws. Polygon helpers in _draw_cube etc. read this.
+var _draw_canvas: CanvasItem = null
+
 # Earthquake animation: when gs emits quake_started, every solid cube whose
 # (x, z) column is in this dict bounces with a random phase, amplitude decaying
 # quadratically to zero over QUAKE_DUR seconds. Then the visual settles.
@@ -167,6 +177,13 @@ func _ready() -> void:
 	gs.unit_animated_move.connect(_on_unit_animated_move)
 	gs.quake_started.connect(_on_quake_started)
 
+	# Stand up the terrain cache layer AFTER world is ready and before _build_hud.
+	terrain_layer = TerrainLayer.new()
+	terrain_layer.view = self
+	terrain_layer.z_index = -1
+	add_child(terrain_layer)
+	world.cells_changed.connect(terrain_layer.queue_redraw)
+
 	_build_hud()
 	gs.start()
 	_select(gs.selected)
@@ -199,13 +216,10 @@ func iso_depth(p: Vector3i) -> int:
 # ---------------------------------------------------------------- drawing
 
 func _draw() -> void:
-	var keys: Array = world.cells.keys()
-	keys.sort_custom(func(a, b):
-		if a.x + a.z != b.x + b.z:
-			return a.x + a.z < b.x + b.z
-		return a.y < b.y)
-	for c in keys:
-		_draw_cube(c, _level_alpha(c.y))
+	# Dynamic pass: highlights, units, dropped spades, flow arrows, projectiles.
+	# Terrain cubes live on `terrain_layer` (z_index = -1, drawn behind us),
+	# which only redraws when something terrain-relevant changes.
+	_draw_canvas = self
 	for c in targets:
 		_draw_highlight(c)
 	var us := []
@@ -268,6 +282,22 @@ func _level_alpha(y: int) -> float:
 		return FADE_BELOW
 	return 0.0   # never used; far-above cubes early-out into the wireframe path
 
+# Cache layer's draw — only fires when we explicitly mark it dirty (vision /
+# terrain / view-level / quake). Sorts the cell keys back-to-front and draws
+# each cube; `_draw_canvas` routes the primitives to the layer.
+func _draw_terrain_layer(canvas: CanvasItem) -> void:
+	if world == null or gs == null:
+		return
+	_draw_canvas = canvas
+	var keys: Array = world.cells.keys()
+	keys.sort_custom(func(a, b):
+		if a.x + a.z != b.x + b.z:
+			return a.x + a.z < b.x + b.z
+		return a.y < b.y)
+	for c in keys:
+		_draw_cube(c, _level_alpha(c.y))
+	_draw_canvas = self
+
 func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var seen_it: bool = gs.seen.has(c)
 	var mat: int = world.material_at(c)
@@ -284,9 +314,9 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 		var w100 := iso(c + Vector3i(1, 0, 0))
 		var w101 := iso(c + Vector3i(1, 0, 1))
 		var w001 := iso(c + Vector3i(0, 0, 1))
-		draw_polyline(PackedVector2Array([w010, w110, w111, w011, w010]), wire_col, WIRE_WIDTH)
-		draw_polyline(PackedVector2Array([w100, w110, w111, w101, w100]), wire_col, WIRE_WIDTH)
-		draw_polyline(PackedVector2Array([w001, w011, w111, w101, w001]), wire_col, WIRE_WIDTH)
+		_draw_canvas.draw_polyline(PackedVector2Array([w010, w110, w111, w011, w010]), wire_col, WIRE_WIDTH)
+		_draw_canvas.draw_polyline(PackedVector2Array([w100, w110, w111, w101, w100]), wire_col, WIRE_WIDTH)
+		_draw_canvas.draw_polyline(PackedVector2Array([w001, w011, w111, w101, w001]), wire_col, WIRE_WIDTH)
 		return
 
 	# Solid path. The vast majority of cells are uniform-colour materials with a
@@ -324,9 +354,9 @@ func _draw_big_cube(c: Vector3i, mat: int, seen: bool, alpha: float, shake: Vect
 	right_col.a = alpha
 	var left_col := top_col.darkened(0.42)
 	left_col.a = alpha
-	draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
-	draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
-	draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
+	_draw_canvas.draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
+	_draw_canvas.draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
+	_draw_canvas.draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
 
 # Pre-sorted 18-cell draw order: back-to-front by (sx + sz), then by sy
 # ascending so stacked sub-cubes paint correctly within a cell.
@@ -422,13 +452,13 @@ func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
 	left_col.a = alpha
 	# Top face: visible if there's no filled sub above.
 	if sy == SUB_Y - 1 or not _sub_filled(pattern, sx, sy + 1, sz):
-		draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
+		_draw_canvas.draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
 	# +X face: visible if no sub to the right within the cell.
 	if sx == SUB_X - 1 or not _sub_filled(pattern, sx + 1, sy, sz):
-		draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
+		_draw_canvas.draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
 	# +Z face: visible if no sub to the front within the cell.
 	if sz == SUB_Z - 1 or not _sub_filled(pattern, sx, sy, sz + 1):
-		draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
+		_draw_canvas.draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
 
 func _draw_highlight(c: Vector3i) -> void:
 	# Wireframe diamond on the visible surface for cell `c`. For air cells we
@@ -546,9 +576,13 @@ func _process(delta: float) -> void:
 		position += pan * PAN_SPEED * delta
 		queue_redraw()
 	# Earthquake bounce: advance time until the quake settles, then clear.
+	# During the bounce every cube is offset per-frame, so the terrain cache
+	# has to redraw alongside the dynamic layer.
 	if _quake_t < QUAKE_DUR:
 		_quake_t += delta
 		queue_redraw()
+		if terrain_layer != null:
+			terrain_layer.queue_redraw()
 		if _quake_t >= QUAKE_DUR:
 			_quake_columns.clear()
 	# Move animations: tween updates u.draw_pos under the hood, but the renderer
@@ -698,6 +732,8 @@ func _set_view_level(level: int) -> void:
 	view_level = clampi(level, 0, VoxelWorld.SY - 1)
 	_refresh_level_label()
 	queue_redraw()
+	if terrain_layer != null:
+		terrain_layer.queue_redraw()
 
 func _refresh_level_label() -> void:
 	if level_label != null:
@@ -848,6 +884,10 @@ func _on_changed() -> void:
 	_refresh_info()
 	_refresh_combo_status()
 	queue_redraw()
+	# Vision can have changed (recompute_vision fires on every action), so the
+	# terrain cache must redraw too — fog colours may be lifting.
+	if terrain_layer != null:
+		terrain_layer.queue_redraw()
 
 func _refresh_combo_status() -> void:
 	if status_label == null:
@@ -1340,6 +1380,17 @@ func _player_leader():
 		if u.is_alive() and u.team == 0 and u.kind == "leader":
 			return u
 	return null
+
+# Child Node2D that caches the static-terrain draw call. Sits at z_index = -1
+# so it renders behind iso_view's own _draw output (units / projectiles / etc).
+# Its _draw delegates back to the view; the view sets `_draw_canvas` so the
+# polygon helpers in _draw_cube route their primitives to this layer.
+class TerrainLayer extends Node2D:
+	var view
+
+	func _draw() -> void:
+		if view != null:
+			view._draw_terrain_layer(self)
 
 # A small overlay that draws the combo ball in HUD (screen) space.
 class BallOverlay extends Control:
