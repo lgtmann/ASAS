@@ -289,14 +289,44 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 		draw_polyline(PackedVector2Array([w001, w011, w111, w101, w001]), wire_col, WIRE_WIDTH)
 		return
 
-	# Solid path: render this cell as a 3x3x2 grid of sub-cubes. Pattern is
-	# deterministic from (c, mat) so the same cell looks the same every frame.
+	# Solid path. The vast majority of cells are uniform-colour materials with a
+	# fully-filled pattern (plain earth, gold ore, etc). Those take a fast path
+	# that draws the cell as a single big cube — 3 polygons instead of ~30.
+	# Trees (variegated colour) and stones / divots (non-full pattern) fall
+	# through to the sub-cube path for their richer geometry.
 	var shake := Vector2(0, _quake_offset(c))
 	var pattern: int = _cell_pattern(c, mat)
+	if pattern == FULL_PATTERN and mat != VoxelWorld.Mat.TREE:
+		_draw_big_cube(c, mat, seen_it, alpha, shake)
+		return
 	for sub: Vector3i in _sub_draw_order:
 		if not _sub_filled(pattern, sub.x, sub.y, sub.z):
 			continue
 		_draw_sub_cube(c, sub.x, sub.y, sub.z, alpha, pattern, mat, seen_it, shake)
+
+# Fast path for uniform full cells — one cube, three polygons. Visually
+# identical to the sub-cube path when the pattern is fully filled and the
+# material has a single colour, since face culling within the sub-cube path
+# would have produced the same outer surface anyway.
+func _draw_big_cube(c: Vector3i, mat: int, seen: bool, alpha: float, shake: Vector2) -> void:
+	var p010 := iso(c + Vector3i(0, 1, 0)) + shake
+	var p110 := iso(c + Vector3i(1, 1, 0)) + shake
+	var p111 := iso(c + Vector3i(1, 1, 1)) + shake
+	var p011 := iso(c + Vector3i(0, 1, 1)) + shake
+	var p100 := iso(c + Vector3i(1, 0, 0)) + shake
+	var p101 := iso(c + Vector3i(1, 0, 1)) + shake
+	var p001 := iso(c + Vector3i(0, 0, 1)) + shake
+	var base_col: Color = (FOG_COLOR if not seen
+			else _mat_colors.get(mat, Color(0.5, 0.5, 0.5)))
+	var top_col := base_col
+	top_col.a = alpha
+	var right_col := top_col.darkened(0.22)
+	right_col.a = alpha
+	var left_col := top_col.darkened(0.42)
+	left_col.a = alpha
+	draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
+	draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
+	draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
 
 # Pre-sorted 18-cell draw order: back-to-front by (sx + sz), then by sy
 # ascending so stacked sub-cubes paint correctly within a cell.
