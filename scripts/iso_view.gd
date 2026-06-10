@@ -337,6 +337,11 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 		_draw_canvas.draw_polyline(PackedVector2Array([w001, w011, w111, w101, w001]), wire_col, WIRE_WIDTH)
 		return
 
+	# Trees are tall surface features — always visible (no fog grey) and never
+	# faded, so they read as brown trunk + green leaves from any view.
+	if mat == VoxelWorld.Mat.TREE:
+		seen_it = true
+		alpha = 1.0
 	# Solid path. The vast majority of cells are uniform-colour materials with a
 	# fully-filled pattern (plain earth, gold ore, etc). Those take a fast path
 	# that draws the cell as a single big cube — 3 polygons instead of ~30.
@@ -375,6 +380,32 @@ func _draw_big_cube(c: Vector3i, mat: int, seen: bool, alpha: float, shake: Vect
 	_draw_canvas.draw_colored_polygon(PackedVector2Array([p010, p110, p111, p011]), top_col)
 	_draw_canvas.draw_colored_polygon(PackedVector2Array([p100, p110, p111, p101]), right_col)
 	_draw_canvas.draw_colored_polygon(PackedVector2Array([p001, p011, p111, p101]), left_col)
+	# Surface texture: a few deterministic speckles break up the flat top face.
+	# Lives on the cached terrain layer, so it costs nothing per-frame.
+	if mat != VoxelWorld.Mat.WATER:
+		_draw_top_speckles(c, p010, p110, p011, top_col)
+
+# 2-4 small darker/lighter mini-diamonds at hash-stable positions on the top
+# face. Pure 2D surface mask — adds visual grain without geometry cost.
+func _draw_top_speckles(c: Vector3i, origin_pt: Vector2, px: Vector2, pz: Vector2, top_col: Color) -> void:
+	var ex: Vector2 = px - origin_pt
+	var ez: Vector2 = pz - origin_pt
+	var h: int = absi((c.x * 92837111) ^ (c.z * 689287499) ^ ((c.y + 7) * 283923481))
+	var count: int = 2 + (h % 3)
+	var dark: Color = top_col.darkened(0.16)
+	dark.a = top_col.a
+	var light: Color = top_col.lightened(0.10)
+	light.a = top_col.a
+	for i in count:
+		var hx: int = absi(h ^ ((i + 1) * 374761393))
+		var fx: float = clampf(float(hx % 83) / 83.0, 0.12, 0.88)
+		var fz: float = clampf(float((hx / 83) % 79) / 79.0, 0.12, 0.88)
+		var center: Vector2 = origin_pt + ex * fx + ez * fz
+		var s: float = 0.07 + float(hx % 5) * 0.014
+		var col: Color = dark if (hx & 1) == 0 else light
+		_draw_canvas.draw_colored_polygon(PackedVector2Array([
+			center + ex * s, center + ez * s, center - ex * s, center - ez * s,
+		]), col)
 
 # Pre-sorted 18-cell draw order: back-to-front by (sx + sz), then by sy
 # ascending so stacked sub-cubes paint correctly within a cell.
