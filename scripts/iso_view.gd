@@ -839,10 +839,29 @@ func _on_click(p: Vector2) -> void:
 	var u = _pick_unit(p)
 	if u != null:
 		_select(u)
+		return
+	# Smart-click harvesting: with a unit selected in plain move mode, clicking
+	# an adjacent tree chops it and an adjacent dirt cell digs it — no mode
+	# button needed. The Dig button still exists for precise two-step digs.
+	if mode == "move" and gs.selected != null and gs.selected.team == 0:
+		var cands: Dictionary = gs.harvest_candidates(gs.selected)
+		if cands.is_empty():
+			return
+		var cell = _pick_cell_in(p, cands.keys())
+		if cell == null:
+			return
+		if cands[cell] == "chop":
+			gs.swing_at(gs.selected, cell)
+		else:
+			gs.dig_at(gs.selected, cell)
 
 func _pick_target(p: Vector2):
-	var ts := targets.duplicate()
-	# Front-to-back so the closest highlight wins overlaps.
+	return _pick_cell_in(p, targets)
+
+# Hit-test a screen point against the visible top face of each candidate cell,
+# front-to-back so the closest wins overlaps.
+func _pick_cell_in(p: Vector2, cells: Array):
+	var ts := cells.duplicate()
 	ts.sort_custom(func(a, b):
 		var sa: int = a.x + a.z
 		var sb: int = b.x + b.z

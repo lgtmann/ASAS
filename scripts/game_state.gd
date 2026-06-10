@@ -607,6 +607,22 @@ func dig_targets(u) -> Array:
 		out.append(p)
 	return out
 
+# Cells the selected unit can harvest with a single click (no mode button):
+# adjacent trees → "chop" (whole-column fell), adjacent dirt-like solids →
+# "dig" (with auto-placed spoil). Returns {Vector3i: "chop"|"dig"}.
+func harvest_candidates(u) -> Dictionary:
+	var out: Dictionary = {}
+	if u == null or u.team != TEAM_PLAYER or u.spade == null or u.acted:
+		return out
+	for d in DIRS:
+		var p: Vector3i = u.grid + d
+		if world.material_at(p) == VoxelWorld.Mat.TREE:
+			out[p] = "chop"
+	for p in dig_targets(u):
+		if not out.has(p):
+			out[p] = "dig"
+	return out
+
 func swing_targets(u) -> Array:
 	if u == null or u.spade == null or u.acted:
 		return []
@@ -963,6 +979,14 @@ func move_to(u, cell: Vector3i) -> void:
 	_face_toward(u, cell)
 	var from_g: Vector3i = u.grid
 	u.grid = cell
+	# Auto-pickup: walking onto a dropped spade grabs it for free (no action).
+	if u.spade == null:
+		var s = spade_on_ground(cell)
+		if s != null:
+			dropped.erase(s)
+			s.owner = u
+			u.spade = s
+			notice.emit("Picked up a spade.")
 	unit_animated_move.emit(u, from_g, cell)
 	_emit_changed()
 
@@ -1202,13 +1226,25 @@ func swing_at(u, cell: Vector3i) -> void:
 			return
 		# Pick adds wall damage, but walls don't have HP yet — note for later.
 		var m: int = world.dig_cell(cell)
-		var reward: String = _treasure_reward(m)
-		if reward != "":
-			notice.emit(reward)
-		elif m == VoxelWorld.Mat.STONE:
-			notice.emit("Smashed a boulder.")
+		if m == VoxelWorld.Mat.TREE:
+			# One chop fells the WHOLE trunk column — wood for every cell.
+			_treasure_reward(m)
+			var felled: int = 1
+			for vdir in [Vector3i(0, 1, 0), Vector3i(0, -1, 0)]:
+				var p: Vector3i = cell + vdir
+				while world.material_at(p) == VoxelWorld.Mat.TREE:
+					_treasure_reward(world.dig_cell(p))
+					felled += 1
+					p += vdir
+			notice.emit("Felled the tree! (+%d wood, bank=%d)" % [felled, wood[active_team]])
 		else:
-			notice.emit("Cleared the cell.")
+			var reward: String = _treasure_reward(m)
+			if reward != "":
+				notice.emit(reward)
+			elif m == VoxelWorld.Mat.STONE:
+				notice.emit("Smashed a boulder.")
+			else:
+				notice.emit("Cleared the cell.")
 	else:
 		notice.emit("Nothing there to swing at.")
 		return
