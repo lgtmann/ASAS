@@ -166,11 +166,16 @@ func _generate_river() -> void:
 		if not in_bounds(cur):
 			break
 
-# Connectivity check: water lives while it's flood-fill connected (cardinal
-# adjacency) to an eternal source. Sources never run out, diverted branches
-# stay wet, and a dam that cuts the channel dries everything beyond it —
-# leaving the empty trench one level below the surface.
-func recompute_water_flow() -> Array:
+const WATER_DIRS := [Vector3i(1, 0, 0), Vector3i(-1, 0, 0),
+		Vector3i(0, 0, 1), Vector3i(0, 0, -1)]
+
+# Pending drain wave: layers of cells (nearest the dam first) that dry one
+# layer per water tick.
+var drain_layers: Array = []
+
+# Flood-fill the live set: water connected (cardinal adjacency) to an eternal
+# source. Sources never run out.
+func _live_water() -> Dictionary:
 	var live: Dictionary = {}
 	var queue: Array = []
 	for s in water_sources:
@@ -186,14 +191,99 @@ func recompute_water_flow() -> Array:
 			if is_water(nxt) and not live.has(nxt):
 				live[nxt] = true
 				queue.append(nxt)
-	var dropped: Array = []
+	return live
+
+# Connectivity check after a dam / terrain change. Disconnected water is NOT
+# removed instantly — it's layered by distance from the breach and dries one
+# layer per turn (see tick_water). Returns the cells scheduled to dry.
+func recompute_water_flow(breach: Vector3i = Vector3i(-9999, -9999, -9999)) -> Array:
+	var live: Dictionary = _live_water()
+	var dead: Dictionary = {}
 	for cell_v in water_flow.keys():
 		var cell: Vector3i = cell_v
-		if not live.has(cell):
-			set_material(cell, Mat.AIR)
-			water_flow.erase(cell)
-			dropped.append(cell)
-	return dropped
+		if is_water(cell) and not live.has(cell):
+			dead[cell] = true
+	if dead.is_empty():
+		drain_layers.clear()
+		return []
+	# BFS layering within the dead set, starting at the breach side.
+	var dist: Dictionary = {}
+	var queue: Array = []
+	if breach.x != -9999:
+		for d in WATER_DIRS:
+			var n: Vector3i = breach + d
+			if dead.has(n):
+				dist[n] = 0
+				queue.append(n)
+	if queue.is_empty():
+		for c in dead.keys():
+			dist[c] = 0
+			queue.append(c)
+	while not queue.is_empty():
+		var cur: Vector3i = queue.pop_front()
+		for d in WATER_DIRS:
+			var n: Vector3i = cur + d
+			if dead.has(n) and not dist.has(n):
+				dist[n] = int(dist[cur]) + 1
+				queue.append(n)
+	var max_d: int = 0
+	for c in dist.keys():
+		max_d = maxi(max_d, int(dist[c]))
+	drain_layers.clear()
+	for i in (max_d + 1):
+		drain_layers.append([])
+	for c in dist.keys():
+		drain_layers[int(dist[c])].append(c)
+	# Unlayered stragglers (isolated pockets) go last.
+	var stragglers: Array = []
+	for c in dead.keys():
+		if not dist.has(c):
+			stragglers.append(c)
+	if not stragglers.is_empty():
+		drain_layers.append(stragglers)
+	return dead.keys()
+
+# One water-simulation step (called each end_turn):
+#   1. The drain wave dries ONE layer, starting at the dam locus.
+#   2. Live water GROWS one ring into adjacent dry beds at its own level
+#      (air with a solid floor) — refilling cleared dams turn by turn, and
+#      flowing into freshly dug trenches.
+func tick_water() -> Dictionary:
+	var result := {"drained": 0, "grown": 0}
+	# --- drain ---
+	if not drain_layers.is_empty():
+		var live: Dictionary = _live_water()
+		while not drain_layers.is_empty():
+			var layer: Array = drain_layers.pop_front()
+			var acted: bool = false
+			for c_v in layer:
+				var c: Vector3i = c_v
+				if is_water(c) and not live.has(c):
+					set_material(c, Mat.AIR)
+					water_flow.erase(c)
+					result["drained"] = int(result["drained"]) + 1
+					acted = true
+			if acted:
+				break          # one layer per tick
+	# --- grow ---
+	var live2: Dictionary = _live_water()
+	var growth: Dictionary = {}
+	for cell_v in water_flow.keys():
+		var cell: Vector3i = cell_v
+		if not live2.has(cell):
+			continue
+		for d in WATER_DIRS:
+			var n: Vector3i = cell + d
+			if growth.has(n) or not in_bounds(n):
+				continue
+			if material_at(n) == Mat.AIR and is_solid(n + Vector3i(0, -1, 0)):
+				growth[n] = water_flow.get(cell, Vector3i(1, 0, 0))
+	for n_v in growth.keys():
+		var n: Vector3i = n_v
+		set_material(n, Mat.WATER)
+		water_flow[n] = growth[n]
+		result["grown"] = int(result["grown"]) + 1
+	return result
 
 # Carve an ADDITIONAL river (used by riverlands areas) without clearing the
 # existing waterways.

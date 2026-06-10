@@ -1518,9 +1518,15 @@ func begin_turn() -> void:
 		notice.emit("Enemy turn %d…" % turn)
 
 func end_turn() -> void:
-	# Siege engines volley, then the river current pushes — all before hand-off.
+	# Siege engines volley, the water simulation steps (drain waves advance,
+	# live water grows into dry beds), then the current pushes — before hand-off.
 	_fire_ballistas(active_team)
 	_fire_trebuchets(active_team)
+	var wr: Dictionary = world.tick_water()
+	if int(wr["drained"]) > 0:
+		notice.emit("The riverbed dries (%d cell(s))…" % int(wr["drained"]))
+	elif int(wr["grown"]) > 0:
+		notice.emit("Water flows onward (%d cell(s))." % int(wr["grown"]))
 	_apply_water_current()
 	# Hand off to the other side; turn counter ticks when wrapping to player.
 	active_team = TEAM_ENEMY if active_team == TEAM_PLAYER else TEAM_PLAYER
@@ -2279,12 +2285,12 @@ func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
 	# Diversion: if the just-cleared source sits next to a water cell at the
 	# same y level, the river spreads into it. Inherits flow direction.
 	_maybe_divert_water(source)
-	# After any change involving water, prune cells no longer reachable from
-	# a source. A dam drops everything downstream.
+	# After any change involving water, re-check connectivity. A dam SCHEDULES
+	# a gradual drain wave that spreads from the dam, one layer per turn.
 	if damming or world.is_water(source):
-		var drained: Array = world.recompute_water_flow()
-		if drained.size() > 0:
-			notice.emit("River dried up — %d cell(s) drained." % drained.size())
+		var scheduled: Array = world.recompute_water_flow(dest if damming else source)
+		if scheduled.size() > 0:
+			notice.emit("River blocked — %d cell(s) will dry, turn by turn." % scheduled.size())
 	if not rewards.is_empty():
 		notice.emit("Dug — " + ", ".join(rewards))
 	else:
