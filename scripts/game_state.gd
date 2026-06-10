@@ -216,6 +216,9 @@ func apply_gravity() -> void:
 	for u in units.duplicate():
 		if not u.is_alive():
 			continue
+		# Hanging on a ladder — no fall.
+		if world.material_at(u.grid) == VoxelWorld.Mat.LADDER:
+			continue
 		var fall_dist := 0
 		while u.grid.y > 0:
 			var below: Vector3i = u.grid + DOWN
@@ -295,6 +298,11 @@ func _bresenham_xz(x0: int, z0: int, x1: int, z1: int) -> Array:
 		out.append(Vector2i(x, z))
 	return out
 
+# Starter deck is deliberately SIMPLE — operators, spades, and the three basic
+# head upgrades. Everything fancier is bought mid-game from the Build Bar with
+# banked wood / oil (see BLUEPRINTS + buy_blueprint).
+const STARTER_UPGRADES := ["spade_blade", "spade_pick", "spade_tip"]
+
 func _build_deck() -> void:
 	draw_pile.clear()
 	hand.clear()
@@ -303,10 +311,133 @@ func _build_deck() -> void:
 		draw_pile.append(_make_card("operator", "Operator", 2, "unit", "place adjacent"))
 	for i in 3:
 		draw_pile.append(_make_card("spade", "Spade", 1, "spade", "give to operator"))
-	for id in UPGRADES:
+	for id in STARTER_UPGRADES:
 		var u: Dictionary = UPGRADES[id]
 		draw_pile.append(_make_card(id, u["title"], u["cost"], u["category"], u["blurb"]))
 	draw_pile.shuffle()
+
+# ---------------------------------------------------------------- Build Bar
+# Mid-game card acquisition: spend banked wood / oil to put a card straight
+# into your hand. The progression arc — simple starter deck, then materials
+# unlock structures (ladder / bridge) and advanced upgrades.
+const BLUEPRINTS := [
+	{"id": "ladder",  "wood": 2, "oil": 0},
+	{"id": "bridge",  "wood": 3, "oil": 0},
+	{"id": "spade_wings",            "wood": 2, "oil": 0},
+	{"id": "spade_dousing_rod",      "wood": 2, "oil": 0},
+	{"id": "double_barrel_spade",    "wood": 2, "oil": 0},
+	{"id": "spade_laser_rangefinder","wood": 2, "oil": 0},
+	{"id": "spade_boomerang",        "wood": 1, "oil": 1},
+	{"id": "spade_propulsion",       "wood": 1, "oil": 1},
+	{"id": "spade_trigger",          "wood": 1, "oil": 1},
+	{"id": "spade_warhead",          "wood": 0, "oil": 2},
+	{"id": "spade_metal_detector",   "wood": 0, "oil": 2},
+	{"id": "spade_earthquake",       "wood": 0, "oil": 2},
+	{"id": "spade_grappling_hook",   "wood": 0, "oil": 2},
+	{"id": "spade_pogostick",        "wood": 0, "oil": 2},
+	{"id": "strength",  "wood": 1, "oil": 1},
+	{"id": "endurance", "wood": 1, "oil": 1},
+	{"id": "hand_eye",  "wood": 1, "oil": 1},
+	{"id": "dual_wield","wood": 2, "oil": 2},
+]
+const STRUCTURES := {
+	"ladder": {"title": "Ladder", "cost": 1, "blurb": "climb walls"},
+	"bridge": {"title": "Bridge", "cost": 1, "blurb": "cross water"},
+}
+
+func blueprint_card_title(id: String) -> String:
+	if STRUCTURES.has(id):
+		return String(STRUCTURES[id]["title"])
+	return String(UPGRADES.get(id, {}).get("title", id))
+
+func can_afford_blueprint(bp: Dictionary) -> bool:
+	return wood[TEAM_PLAYER] >= int(bp["wood"]) and oil[TEAM_PLAYER] >= int(bp["oil"])
+
+func buy_blueprint(id: String) -> bool:
+	if is_over or active_team != TEAM_PLAYER:
+		return false
+	var bp: Dictionary = {}
+	for b in BLUEPRINTS:
+		if b["id"] == id:
+			bp = b
+			break
+	if bp.is_empty():
+		return false
+	if not can_afford_blueprint(bp):
+		notice.emit("Need %dw %do for %s." % [int(bp["wood"]), int(bp["oil"]), blueprint_card_title(id)])
+		return false
+	wood[TEAM_PLAYER] -= int(bp["wood"])
+	oil[TEAM_PLAYER] -= int(bp["oil"])
+	var card: Dictionary
+	if STRUCTURES.has(id):
+		var s: Dictionary = STRUCTURES[id]
+		card = _make_card(id, s["title"], s["cost"], "structure", s["blurb"])
+	else:
+		var u: Dictionary = UPGRADES[id]
+		card = _make_card(id, u["title"], u["cost"], u["category"], u["blurb"])
+	hand.append(card)
+	cards_drawn.emit(1)
+	notice.emit("Built %s — added to hand." % card["title"])
+	_emit_changed()
+	return true
+
+# ---------------------------------------------------------------- structures
+
+# Valid placement cells for a structure card. Built by any friendly unit:
+# within Chebyshev 1 of one. Ladder mounts an air cell that touches a solid
+# wall horizontally (or stacks on a ladder below). Bridge planks an air cell
+# directly above water.
+func structure_targets(card) -> Array:
+	var out: Array = []
+	if card == null:
+		return out
+	var id: String = String(card["id"])
+	var seen_cells: Dictionary = {}
+	for u in units:
+		if not u.is_alive() or u.team != TEAM_PLAYER:
+			continue
+		for dx in range(-1, 2):
+			for dy in range(-1, 2):
+				for dz in range(-1, 2):
+					var p: Vector3i = u.grid + Vector3i(dx, dy, dz)
+					if seen_cells.has(p) or not world.in_bounds(p):
+						continue
+					seen_cells[p] = true
+					if not world.is_air(p) or unit_at(p) != null:
+						continue
+					if id == "ladder":
+						if _ladder_mountable(p):
+							out.append(p)
+					elif id == "bridge":
+						if world.is_water(p + DOWN):
+							out.append(p)
+	return out
+
+func _ladder_mountable(p: Vector3i) -> bool:
+	for d in DIRS:
+		if world.is_solid(p + d):
+			return true
+	return world.material_at(p + DOWN) == VoxelWorld.Mat.LADDER
+
+func play_structure_at(card, cell: Vector3i) -> bool:
+	if card == null or not hand.has(card):
+		return false
+	if not structure_targets(card).has(cell):
+		notice.emit("Can't build there.")
+		return false
+	if not _spend(int(card["cost"])):
+		return false
+	var id: String = String(card["id"])
+	if id == "ladder":
+		world.set_material(cell, VoxelWorld.Mat.LADDER)
+		notice.emit("Ladder built.")
+	elif id == "bridge":
+		world.set_material(cell, VoxelWorld.Mat.BRIDGE)
+		notice.emit("Bridge built.")
+	hand.erase(card)
+	discard.append(card)     # stays in your deck — buy once, reuse forever
+	_emit_changed()
+	return true
 
 func _make_card(id: String, title: String, cost: int, category: String, blurb: String) -> Dictionary:
 	_next_card_instance += 1
@@ -577,13 +708,9 @@ func combo_validate(cards: Array) -> Dictionary:
 			return {"valid": false, "reason": "Operator upgrades need an Operator card."}
 	if cost > energy:
 		return {"valid": false, "reason": "Not enough energy (%d / %d)." % [cost, energy]}
-	# Shaft upgrades require lumber to craft (1 wood per shaft card).
-	var wood_cost: int = shaft
-	if wood_cost > wood[TEAM_PLAYER]:
-		return {"valid": false, "reason":
-			"Need %d wood for shaft (you have %d)." % [wood_cost, wood[TEAM_PLAYER]]}
-	return {"valid": true, "total_cost": cost, "wood_cost": wood_cost,
-			"is_spade_only": op_count == 0}
+	# (Materials are paid when cards are BOUGHT from the Build Bar, so combos
+	# only cost energy.)
+	return {"valid": true, "total_cost": cost, "is_spade_only": op_count == 0}
 
 func combo_targets(cards: Array) -> Array:
 	var v: Dictionary = combo_validate(cards)
@@ -626,7 +753,6 @@ func play_combo_at(cards: Array, target_cell: Vector3i) -> bool:
 		notice.emit("Pick a standable, empty tile.")
 		return false
 	energy -= int(v["total_cost"])
-	wood[TEAM_PLAYER] -= int(v.get("wood_cost", 0))
 	var op = _spawn_unit(TEAM_PLAYER, target_cell, false)
 	op.kind = "operator"
 	# Spade card (if included) attaches before slot upgrades.
@@ -654,7 +780,6 @@ func _play_spade_only_combo(cards: Array, target_cell: Vector3i, v: Dictionary) 
 		notice.emit("Spade needs an empty tile or a spadeless operator.")
 		return false
 	energy -= int(v["total_cost"])
-	wood[TEAM_PLAYER] -= int(v.get("wood_cost", 0))
 	var s := Spade.new()
 	# Apply slot upgrades to the freshly-made spade.
 	for c in cards:

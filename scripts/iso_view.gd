@@ -18,6 +18,7 @@ const MODE_COLORS := {
 	"throw": Color(0.35, 0.85, 1.00),
 	"place_operator": Color(0.55, 0.90, 1.00),
 	"upgrade": Color(1.00, 0.45, 1.00),
+	"place_structure": Color(0.85, 0.68, 0.35),
 }
 
 # --- Card UI (frame + art + labels composite) -------------------------------
@@ -36,6 +37,7 @@ const CATEGORY_TINT := {
 	"shaft": Color(0.92, 1.00, 0.88),
 	"handle": Color(1.00, 0.90, 0.75),
 	"operator_upgrade": Color(1.00, 0.85, 0.85),
+	"structure": Color(0.92, 0.82, 0.62),
 }
 # Layout proportions inside the 2:3 card (matches the frame prompt I wrote).
 # Cost sits on the gem (top-left); title is centred across the whole plaque so
@@ -120,6 +122,7 @@ var discard_pile_panel: Panel
 var discard_pile_label: Label
 var sim_btn: Button
 var restart_btn: Button
+var build_buttons: Dictionary = {}     # blueprint id -> Button (Build Bar)
 var context_buttons: Array = []
 var _pending_anim_count: int = 0       # newly-drawn cards to slide in
 var _ai_running: bool = false          # locks player input while AI is acting
@@ -173,6 +176,8 @@ func _ready() -> void:
 	_mat_colors[VoxelWorld.Mat.OIL] = Color(0.15, 0.12, 0.08)
 	_mat_colors[VoxelWorld.Mat.STONE] = Color(0.55, 0.55, 0.58)
 	_mat_colors[VoxelWorld.Mat.TREE] = Color(0.30, 0.45, 0.22)
+	_mat_colors[VoxelWorld.Mat.LADDER] = Color(0.78, 0.62, 0.38)
+	_mat_colors[VoxelWorld.Mat.BRIDGE] = Color(0.62, 0.45, 0.28)
 
 	gs = GameState.new()
 	gs.setup(world)
@@ -337,9 +342,9 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 		_draw_canvas.draw_polyline(PackedVector2Array([w001, w011, w111, w101, w001]), wire_col, WIRE_WIDTH)
 		return
 
-	# Trees are tall surface features — always visible (no fog grey) and never
-	# faded, so they read as brown trunk + green leaves from any view.
-	if mat == VoxelWorld.Mat.TREE:
+	# Trees and player-built structures are surface features — always visible
+	# (no fog grey) and never faded.
+	if mat == VoxelWorld.Mat.TREE or mat == VoxelWorld.Mat.LADDER or mat == VoxelWorld.Mat.BRIDGE:
 		seen_it = true
 		alpha = 1.0
 	# Solid path. The vast majority of cells are uniform-colour materials with a
@@ -454,6 +459,19 @@ func _cell_pattern(c: Vector3i, mat: int) -> int:
 		if not has_tree_above:
 			p |= 0x1FF << ((SUB_Y - 1) * SUB_X * SUB_Z)
 		return p
+	if mat == VoxelWorld.Mat.LADDER:
+		# Two side rails (full height) + rungs on alternating sub-layers,
+		# all in the cell's middle z-slice — reads as a ladder lattice.
+		var p: int = 0
+		for sy in range(SUB_Y):
+			p |= 1 << (0 + 1 * SUB_X + sy * SUB_X * SUB_Z)   # left rail
+			p |= 1 << (2 + 1 * SUB_X + sy * SUB_X * SUB_Z)   # right rail
+			if sy % 2 == 1:
+				p |= 1 << (1 + 1 * SUB_X + sy * SUB_X * SUB_Z)  # rung
+		return p
+	if mat == VoxelWorld.Mat.BRIDGE:
+		# A flat plank deck: only the top sub-layer filled.
+		return 0x1FF << ((SUB_Y - 1) * SUB_X * SUB_Z)
 	if mat == VoxelWorld.Mat.STONE:
 		var p: int = FULL_PATTERN
 		var seed: int = (c.x * 73 + c.z * 31 + c.y * 11) & 0xFFFF
@@ -857,6 +875,13 @@ func _pick_unit(p: Vector2):
 	return null
 
 func _act_on(cell) -> void:
+	# Structure placement (ladder / bridge) takes top priority.
+	if mode == "place_structure":
+		var card = pending_card
+		pending_card = null
+		mode = "move"
+		gs.play_structure_at(card, cell)
+		return
 	# Combo play takes priority over single-unit actions.
 	if not selected_cards.is_empty():
 		var v: Dictionary = gs.combo_validate(selected_cards)
@@ -903,6 +928,8 @@ func _set_mode(m: String) -> void:
 	_on_changed()
 
 func _targets_for_mode() -> Array:
+	if mode == "place_structure":
+		return gs.structure_targets(pending_card)
 	if not selected_cards.is_empty():
 		return gs.combo_targets(selected_cards)
 	var u = gs.selected
@@ -996,6 +1023,25 @@ func _build_hud() -> void:
 	discard_pile_panel = _pile_panel(Vector2(1470, HAND_Y + 70))
 	discard_pile_label = _pile_label(discard_pile_panel, "Discard")
 
+	# Build Bar — two-column blueprint grid on the right edge, below the level
+	# controls. Buy with banked wood/oil; bought cards go straight to hand.
+	var bb_label := _label(Vector2(1370, 150))
+	bb_label.text = "Build Bar (w=wood o=oil)"
+	var col_w := 110.0
+	var row_h := 26.0
+	var i := 0
+	for bp in GameState.BLUEPRINTS:
+		var id: String = String(bp["id"])
+		var b := Button.new()
+		b.text = "%s %s" % [gs.blueprint_card_title(id), _bp_cost_label(bp)]
+		b.add_theme_font_size_override("font_size", 10)
+		b.position = Vector2(1370 + (i % 2) * (col_w + 4), 172 + float(i / 2) * row_h)
+		b.size = Vector2(col_w, row_h - 3)
+		b.pressed.connect(func(): gs.buy_blueprint(id))
+		hud.add_child(b)
+		build_buttons[id] = b
+		i += 1
+
 	# Ball overlay sits on top of every HUD element for the combo animation.
 	ball_overlay = BallOverlay.new()
 	ball_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1024,6 +1070,14 @@ func _build_hud() -> void:
 	view_btn.size = Vector2(118, 32)
 	view_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_3d.tscn"))
 	hud.add_child(view_btn)
+
+func _bp_cost_label(bp: Dictionary) -> String:
+	var parts: Array = []
+	if int(bp["wood"]) > 0:
+		parts.append("%dw" % int(bp["wood"]))
+	if int(bp["oil"]) > 0:
+		parts.append("%do" % int(bp["oil"]))
+	return " ".join(parts)
 
 func _pile_panel(pos: Vector2) -> Panel:
 	var p := Panel.new()
@@ -1144,6 +1198,13 @@ func _refresh_info() -> void:
 			who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
 		end_turn_btn.disabled = gs.is_over or _ai_running or gs.active_team != GameState.TEAM_PLAYER
+	# Build Bar affordability: grey out blueprints you can't pay for yet.
+	for bp in GameState.BLUEPRINTS:
+		var btn: Button = build_buttons.get(String(bp["id"]))
+		if btn != null:
+			btn.disabled = gs.is_over or _ai_running \
+					or gs.active_team != GameState.TEAM_PLAYER \
+					or not gs.can_afford_blueprint(bp)
 
 func _refresh_context() -> void:
 	# Don't blow away the buttons mid-animation — the combo animation owns them
@@ -1415,10 +1476,24 @@ func _make_card_button(card: Dictionary, x: float, y: float, cb: Callable) -> Bu
 	return b
 
 func _on_card(card) -> void:
-	# Clicking a card toggles it in the current combo. The play happens when
-	# the user clicks a valid target tile (see _act_on).
 	if _ai_running or _combo_animating:
 		return
+	# Structure cards (ladder / bridge) place directly — not part of combos.
+	if String(card.get("category", "")) == "structure":
+		selected_cards.clear()
+		pending_card = card
+		mode = "place_structure"
+		_on_changed()
+		if targets.is_empty():
+			gs.notice.emit("No valid spot for %s — move a unit closer." % card["title"])
+			pending_card = null
+			mode = "move"
+			_on_changed()
+		else:
+			gs.notice.emit("Pick where to build the %s." % card["title"])
+		return
+	# Clicking a card toggles it in the current combo. The play happens when
+	# the user clicks a valid target tile (see _act_on).
 	if selected_cards.has(card):
 		selected_cards.erase(card)
 	else:

@@ -13,7 +13,7 @@ signal cells_changed
 # for caches (vision recompute skips when version + unit positions match).
 var version: int = 0
 
-enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE }
+enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE, LADDER, BRIDGE }
 
 const SX := 16        # footprint width  (x)  — RTS-scale map
 const SZ := 16        # footprint depth  (z)
@@ -63,6 +63,8 @@ func _build_materials() -> void:
 	_mats[Mat.OIL] = _make_mat(Color(0.15, 0.12, 0.08))
 	_mats[Mat.STONE] = _make_mat(Color(0.55, 0.55, 0.58))
 	_mats[Mat.TREE] = _make_mat(Color(0.30, 0.45, 0.22))
+	_mats[Mat.LADDER] = _make_mat(Color(0.78, 0.62, 0.38))
+	_mats[Mat.BRIDGE] = _make_mat(Color(0.62, 0.45, 0.28))
 
 func _make_mat(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -226,7 +228,7 @@ func material_at(p: Vector3i) -> int:
 func is_solid(p: Vector3i) -> bool:
 	var m: int = material_at(p)
 	return m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC \
-			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE
+			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE or m == Mat.BRIDGE
 
 func is_air(p: Vector3i) -> bool:
 	return in_bounds(p) and material_at(p) == Mat.AIR
@@ -234,19 +236,22 @@ func is_air(p: Vector3i) -> bool:
 func is_water(p: Vector3i) -> bool:
 	return in_bounds(p) and material_at(p) == Mat.WATER
 
-# A cell a unit can pass through (not solid). Air OR water — water cells are
-# walk-into-able; the current pushes you on the next end-of-turn tick.
+# A cell a unit can pass through (not solid). Air, water (wading), or a
+# ladder (climbing through it).
 func is_passable(p: Vector3i) -> bool:
 	if not in_bounds(p):
 		return false
 	var m: int = material_at(p)
-	return m == Mat.AIR or m == Mat.WATER
+	return m == Mat.AIR or m == Mat.WATER or m == Mat.LADDER
 
-# A cell a unit can stand in: passable with solid ground directly below
-# (the floor at the very bottom counts as solid).
+# A cell a unit can stand in: passable with solid ground directly below.
+# Ladder cells are standable with NO floor (you're hanging on the rungs) —
+# that one rule makes multi-level climbs fall out of the normal ±1 BFS.
 func is_standable(p: Vector3i) -> bool:
 	if not is_passable(p):
 		return false
+	if material_at(p) == Mat.LADDER:
+		return true
 	if p.y == 0:
 		return true
 	return is_solid(p + Vector3i(0, -1, 0))
@@ -271,7 +276,8 @@ func center() -> Vector3:
 func dig_cell(p: Vector3i) -> int:
 	var m: int = material_at(p)
 	if m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC \
-			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE:
+			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE \
+			or m == Mat.LADDER or m == Mat.BRIDGE:
 		set_material(p, Mat.AIR)
 	return m
 
