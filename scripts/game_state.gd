@@ -13,6 +13,7 @@ signal turn_started(team)               # fires from begin_turn (use to kick off
 signal game_over(winner_team)           # fires once when a team is wiped
 signal unit_animated_move(unit, from_grid, to_grid)   # iso_view tweens draw_pos
 signal quake_started(columns)           # Array[Vector2i] of (x, z) columns to shake
+signal area_cleared(area_num)           # all enemies dead — offer reward + expansion
 
 const MAX_ENERGY := 6                  # leader's combo budget per turn
 const HAND_SIZE := 5
@@ -87,6 +88,11 @@ var active_team: int = TEAM_PLAYER
 var sim_mode: bool = false
 var is_over: bool = false
 
+# Campaign: the run is a chain of increasingly hard areas. Clearing one offers
+# a special-unit card, then a choice of expansion direction.
+var area: int = 1
+var _area_clear_emitted: bool = false
+
 # Stockpiled strategic resources (per team). Oil unlocks advanced cards later.
 # Energy is still per-turn — these are persistent banks that fill over time.
 var oil: Array = [0, 0]   # oil[team] = barrels in the bank
@@ -157,9 +163,16 @@ func winner() -> int:
 func _check_game_over() -> void:
 	if is_over:
 		return
-	if team_alive_count(TEAM_PLAYER) == 0 or team_alive_count(TEAM_ENEMY) == 0:
+	# Losing your whole team ends the run.
+	if team_alive_count(TEAM_PLAYER) == 0:
 		is_over = true
-		game_over.emit(winner())
+		game_over.emit(TEAM_ENEMY)
+		return
+	# Wiping the enemy CLEARS THE AREA (campaign continues) instead of ending.
+	if team_alive_count(TEAM_ENEMY) == 0 and not _area_clear_emitted:
+		_area_clear_emitted = true
+		notice.emit("Area %d cleared!" % area)
+		area_cleared.emit(area)
 
 # ---------------------------------------------------------------- AI
 
@@ -413,6 +426,8 @@ func structure_targets(card) -> Array:
 	for u in units:
 		if not u.is_alive() or u.team != TEAM_PLAYER:
 			continue
+		if u.kind == "ranger":
+			continue          # rangers can't build
 		for dx in range(-1, 2):
 			for dy in range(-1, 2):
 				for dz in range(-1, 2):
@@ -466,6 +481,77 @@ func play_structure_at(card, cell: Vector3i) -> bool:
 	discard.append(card)     # stays in your deck — buy once, reuse forever
 	_emit_changed()
 	return true
+
+# ---------------------------------------------------------------- areas / campaign
+
+# Special unit cards offered on area clear (pick 1 of 3).
+const SPECIAL_UNITS := {
+	"warrior": {"title": "Warrior", "cost": 2, "blurb": "+2 dmg; can't dig/chop"},
+	"ranger": {"title": "Ranger", "cost": 2, "blurb": "throw range +4; can't build"},
+	"plow": {"title": "Plow", "cost": 3, "blurb": "levels a 3-wide path as it moves"},
+}
+
+func grant_special(id: String) -> void:
+	if not SPECIAL_UNITS.has(id):
+		return
+	var s: Dictionary = SPECIAL_UNITS[id]
+	hand.append(_make_card(id, s["title"], s["cost"], "unit", s["blurb"]))
+	notice.emit("%s card added to your hand." % s["title"])
+	_emit_changed()
+
+# Move the run into the next area: fresh (harder) map, surviving player units
+# carry over to the near corner, fog resets, enemies scale with area number.
+# `direction` ("top_left" / "top_right") is recorded flavour for now.
+func advance_area(direction: String) -> void:
+	area += 1
+	_area_clear_emitted = false
+	dropped.clear()
+	ballistas.clear()
+	pending_card_cleanup()
+	world.generate()
+	world.version += 1
+	world.cells_changed.emit()
+	seen.clear()
+	_vision_key = ""
+	# Carry survivors; everything else despawns with the old area.
+	var survivors: Array = []
+	for u in units:
+		if u.is_alive() and u.team == TEAM_PLAYER:
+			u.task = {}
+			survivors.append(u)
+	units = survivors
+	var corner_x: int = world.SX - 3
+	var corner_z: int = world.SZ - 3
+	for i in survivors.size():
+		var u = survivors[i]
+		u.grid = _free_spot_near(corner_x, corner_z)
+		u.draw_pos = Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
+	# Enemy force scales with the area number.
+	var el = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
+	el.kind = "leader"
+	el.hp = 6 + 2 * area
+	el.max_hp = el.hp
+	for i in (1 + area):
+		_spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), true)
+	active_team = TEAM_PLAYER
+	notice.emit("Entered area %d (%s). The enemy grows stronger…" % [area, direction])
+	begin_turn()
+
+# First unoccupied standable surface cell spiralling out from (x, z).
+func _free_spot_near(x: int, z: int) -> Vector3i:
+	for r in range(0, 6):
+		for dx in range(-r, r + 1):
+			for dz in range(-r, r + 1):
+				var cx: int = clampi(x + dx, 0, world.SX - 1)
+				var cz: int = clampi(z + dz, 0, world.SZ - 1)
+				var p: Vector3i = world.surface_cell(cx, cz)
+				if world.is_standable(p) and unit_at(p) == null:
+					return p
+	return world.surface_cell(x, z)
+
+# Drop any in-flight UI card refs that no longer make sense across areas.
+func pending_card_cleanup() -> void:
+	pass    # hook for future cross-area cleanup
 
 # ---------------------------------------------------------------- upgrade choices
 # Drawn when the deck cycles; playing one shows 3 of these. "passive" picks
@@ -673,6 +759,9 @@ func assign_harvest(u, tree_cell: Vector3i) -> void:
 	if u == null or u.spade == null:
 		notice.emit("Needs a spade to harvest.")
 		return
+	if u.kind == "warrior" or u.kind == "plow":
+		notice.emit("%s can't fell trees." % u.kind.capitalize())
+		return
 	u.task = {"type": "harvest", "target": tree_cell}
 	notice.emit("Harvest assigned (~%d turn(s))." % harvest_turns(u, tree_cell))
 	_run_unit_task(u)             # start working right now
@@ -853,6 +942,15 @@ func _spend(n: int) -> bool:
 
 # --- target sets (cells a mode can act on; used for wireframe highlights) ---
 
+# Effective throw range: spade range, +4 for rangers (their whole specialty).
+func throw_range_for(u) -> int:
+	if u == null or u.spade == null:
+		return 0
+	var r: int = u.spade.throw_range
+	if u.kind == "ranger":
+		r += 4
+	return r
+
 func move_range_for(u) -> int:
 	var r: int = MOVE_RANGE
 	if u != null and u.team == TEAM_PLAYER and passives.has("swift_ops"):
@@ -889,6 +987,8 @@ func dig_targets(u) -> Array:
 	# Trees and boulders are obstacles — chop those with Swing, not Dig.
 	if u == null or u.spade == null or u.acted:
 		return []
+	if u.kind == "warrior" or u.kind == "plow":
+		return []      # warriors don't dig; plows level terrain by moving
 	var out := []
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
@@ -935,7 +1035,7 @@ func throw_targets(u) -> Array:
 	# tile tops light up, not the airspace above them. Spade Wings widens this.
 	if u == null or u.spade == null or u.acted:
 		return []
-	var r: int = u.spade.throw_range
+	var r: int = throw_range_for(u)
 	var out := []
 	for dx in range(-r, r + 1):
 		for dy in range(-r, r + 1):
@@ -1067,7 +1167,19 @@ func play_combo_at(cards: Array, target_cell: Vector3i) -> bool:
 		return false
 	energy -= int(v["total_cost"])
 	var op = _spawn_unit(TEAM_PLAYER, target_cell, false)
+	# The anchor "unit" card decides the kind (operator / warrior / ranger / plow).
 	op.kind = "operator"
+	for c in cards:
+		if String(c.get("category", "")) == "unit" and SPECIAL_UNITS.has(String(c["id"])):
+			op.kind = String(c["id"])
+			break
+	match op.kind:
+		"warrior":
+			op.hp = 7
+			op.max_hp = 7
+		"plow":
+			op.hp = 8
+			op.max_hp = 8
 	# Spade card (if included) attaches before slot upgrades.
 	for c in cards:
 		if String(c.get("category", "")) == "spade":
@@ -1285,7 +1397,47 @@ func move_to(u, cell: Vector3i) -> void:
 			u.spade = s
 			notice.emit("Picked up a spade.")
 	unit_animated_move.emit(u, from_g, cell)
+	if u.kind == "plow":
+		_plow_swath(u, from_g, cell)
 	_emit_changed()
+
+# The plow levels the 3-wide swath directly ahead of its movement: each of the
+# three columns (front, front-left, front-right) is knocked down one level —
+# tree columns fell entirely — and the materials are banked.
+func _plow_swath(u, from_g: Vector3i, dest: Vector3i) -> void:
+	var dx: int = signi(dest.x - from_g.x)
+	var dz: int = signi(dest.z - from_g.z)
+	var dir: Vector3i
+	if absi(dest.x - from_g.x) >= absi(dest.z - from_g.z) and dx != 0:
+		dir = Vector3i(dx, 0, 0)
+	elif dz != 0:
+		dir = Vector3i(0, 0, dz)
+	else:
+		return
+	var perp := Vector3i(dir.z, 0, dir.x)
+	var rewards: Array = []
+	var hit: int = 0
+	for off in [-1, 0, 1]:
+		var col: Vector3i = dest + dir + perp * off
+		if col.x < 0 or col.x >= world.SX or col.z < 0 or col.z >= world.SZ:
+			continue
+		for y in range(world.SY - 1, -1, -1):
+			var p := Vector3i(col.x, y, col.z)
+			if not world.is_solid(p):
+				continue
+			if world.material_at(p) == VoxelWorld.Mat.TREE:
+				for tc in tree_column_cells(p):
+					var lab2: String = _treasure_reward(world.dig_cell(tc))
+					if lab2 != "":
+						rewards.append(lab2)
+			else:
+				var lab: String = _treasure_reward(world.dig_cell(p))
+				if lab != "":
+					rewards.append(lab)
+			hit += 1
+			break
+	if hit > 0:
+		notice.emit("Plow levels %d column(s). %s" % [hit, ", ".join(rewards.slice(0, 3))])
 
 # ---------------------------------------------------------------- spade actions
 
@@ -1514,8 +1666,9 @@ func swing_at(u, cell: Vector3i) -> void:
 		notice.emit("No spade to swing.")
 		return
 	_face_toward(u, cell)
-	# Base swing damage + Strength + head-type bonus (computed at use).
-	var base: int = u.spade.swing_dmg + (1 if u.strength else 0)
+	# Base swing damage + Strength + Warrior bonus + head-type bonus.
+	var base: int = u.spade.swing_dmg + (1 if u.strength else 0) \
+			+ (2 if u.kind == "warrior" else 0)
 	var enemy = unit_at(cell)
 	if enemy != null and enemy.team != u.team:
 		if not _consume_action(u):
@@ -1524,6 +1677,10 @@ func swing_at(u, cell: Vector3i) -> void:
 		_damage(enemy, dmg)
 		notice.emit("Swing hit for %d." % dmg)
 	elif world.is_solid(cell):
+		# Warriors are fighters only — no chopping or wall-clearing.
+		if u.kind == "warrior" or u.kind == "plow":
+			notice.emit("%s can't dig or chop." % u.kind.capitalize())
+			return
 		if not _consume_action(u):
 			return
 		# Pick adds wall damage, but walls don't have HP yet — note for later.

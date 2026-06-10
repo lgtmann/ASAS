@@ -208,6 +208,7 @@ func _ready() -> void:
 	gs.game_over.connect(_on_game_over)
 	gs.unit_animated_move.connect(_on_unit_animated_move)
 	gs.quake_started.connect(_on_quake_started)
+	gs.area_cleared.connect(_on_area_cleared)
 
 	# Stand up the terrain cache layer AFTER world is ready and before _build_hud.
 	terrain_layer = TerrainLayer.new()
@@ -579,6 +580,12 @@ func _draw_unit(u, alpha: float) -> void:
 		col = LEADER_COLOR
 	else:
 		col = TEAM_COLORS[u.team]
+		# Special unit kinds read via tint: warrior darker, ranger lighter,
+		# plow machine-brown (plus the letter badge drawn with the HP text).
+		match u.kind:
+			"warrior": col = col.darkened(0.30)
+			"ranger": col = col.lightened(0.30)
+			"plow": col = col.lerp(Color(0.55, 0.45, 0.28), 0.6)
 	if u == gs.selected:
 		col = col.lightened(0.25)
 	col.a = alpha
@@ -629,6 +636,10 @@ func _draw_unit(u, alpha: float) -> void:
 	var font := ThemeDB.fallback_font
 	if font != null:
 		draw_string(font, body_top - Vector2(8, 6), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+		# Kind initial for special units (W / R / P) on the body.
+		if u.kind in ["warrior", "ranger", "plow"]:
+			draw_string(font, feet + Vector2(-4, -body_h * 0.45),
+				u.kind.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		var badge_pos: Vector2 = feet + Vector2(-14, -body_h - 24)
 		var is_focal: bool = (u.grid.y - 1) == view_level
 		var badge_col: Color = Color(0.30, 1.00, 0.50) if is_focal else Color(0.85, 0.85, 0.95)
@@ -850,12 +861,13 @@ func _on_right_click(p: Vector2) -> void:
 		var target = _pick_unit(p)
 		if target != null and target.team != 0 and target.is_alive():
 			var d: int = gs._cheb3(sel.grid, target.grid)
+			var reach: int = gs.throw_range_for(sel)
 			if d <= 1:
 				gs.swing_at(sel, target.grid)
-			elif d <= sel.spade.throw_range:
+			elif d <= reach:
 				gs.throw_at(sel, target.grid)
 			else:
-				gs.notice.emit("Out of range — throw reaches %d." % sel.spade.throw_range)
+				gs.notice.emit("Out of range — throw reaches %d." % reach)
 			return
 	_cancel_action()
 
@@ -1201,6 +1213,59 @@ func _open_choice_modal(card) -> void:
 	cancel.size = Vector2(80, 28)
 	cancel.pressed.connect(_close_modal)
 	panel.add_child(cancel)
+
+# Area cleared → special-unit reward pick, then the expansion direction pick.
+func _on_area_cleared(area_num: int) -> void:
+	var panel := _make_modal(96 + 3 * 64.0)
+	var title := Label.new()
+	title.text = "Area %d cleared! Choose a special unit card:" % area_num
+	title.add_theme_font_size_override("font_size", 17)
+	title.position = Vector2(20, 14)
+	panel.add_child(title)
+	var y := 52.0
+	for id in GameState.SPECIAL_UNITS:
+		var s: Dictionary = GameState.SPECIAL_UNITS[id]
+		var b := Button.new()
+		b.text = "%s — %s" % [s["title"], s["blurb"]]
+		b.position = Vector2(20, y)
+		b.size = Vector2(440, 56)
+		var picked_id: String = id
+		b.pressed.connect(func():
+			gs.grant_special(picked_id)
+			_open_expand_modal())
+		panel.add_child(b)
+		y += 64.0
+
+func _open_expand_modal() -> void:
+	var panel := _make_modal(140)
+	var title := Label.new()
+	title.text = "Expand your territory:"
+	title.add_theme_font_size_override("font_size", 17)
+	title.position = Vector2(20, 14)
+	panel.add_child(title)
+	var tl := Button.new()
+	tl.text = "Top-Left"
+	tl.position = Vector2(40, 60)
+	tl.size = Vector2(180, 56)
+	tl.pressed.connect(func(): _advance_area("top_left"))
+	panel.add_child(tl)
+	var tr := Button.new()
+	tr.text = "Top-Right"
+	tr.position = Vector2(260, 60)
+	tr.size = Vector2(180, 56)
+	tr.pressed.connect(func(): _advance_area("top_right"))
+	panel.add_child(tr)
+
+func _advance_area(direction: String) -> void:
+	_close_modal()
+	mode = ""
+	pending_card = null
+	selected_cards.clear()
+	gs.advance_area(direction)
+	var leader = _player_leader()
+	if leader != null:
+		_select(leader)
+		_center_on(leader.grid)
 
 # Confirm dialog for a distant-tree harvest task.
 func _open_harvest_confirm(u, tree_cell: Vector3i) -> void:
