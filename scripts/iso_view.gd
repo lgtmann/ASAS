@@ -584,8 +584,10 @@ func _draw_unit(u, alpha: float) -> void:
 		# plow machine-brown (plus the letter badge drawn with the HP text).
 		match u.kind:
 			"warrior": col = col.darkened(0.30)
-			"ranger": col = col.lightened(0.30)
+			"javelin": col = col.lightened(0.30)
 			"plow": col = col.lerp(Color(0.55, 0.45, 0.28), 0.6)
+			"wolf": col = col.lerp(Color(0.55, 0.55, 0.58), 0.65)
+			"wizard": col = col.lerp(Color(0.62, 0.25, 0.85), 0.7)
 	if u == gs.selected:
 		col = col.lightened(0.25)
 	col.a = alpha
@@ -637,7 +639,7 @@ func _draw_unit(u, alpha: float) -> void:
 	if font != null:
 		draw_string(font, body_top - Vector2(8, 6), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 		# Kind initial for special units (W / R / P) on the body.
-		if u.kind in ["warrior", "ranger", "plow"]:
+		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard"]:
 			draw_string(font, feet + Vector2(-4, -body_h * 0.45),
 				u.kind.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		var badge_pos: Vector2 = feet + Vector2(-14, -body_h - 24)
@@ -857,10 +859,17 @@ func _on_right_click(p: Vector2) -> void:
 	if _ai_running or gs.is_over:
 		return
 	var sel = gs.selected
-	if sel != null and sel.team == 0 and sel.spade != null:
+	if sel != null and sel.team == 0:
 		var target = _pick_unit(p)
 		if target != null and target.team != 0 and target.is_alive():
 			var d: int = gs._cheb3(sel.grid, target.grid)
+			# Converted wolves (and other spadeless beasts) bite when adjacent.
+			if sel.spade == null:
+				if sel.kind == "wolf" and d <= 1:
+					gs.bite(sel, target)
+				else:
+					gs.notice.emit("No spade to attack with.")
+				return
 			var reach: int = gs.throw_range_for(sel)
 			if d <= 1:
 				gs.swing_at(sel, target.grid)
@@ -1214,27 +1223,42 @@ func _open_choice_modal(card) -> void:
 	cancel.pressed.connect(_close_modal)
 	panel.add_child(cancel)
 
-# Area cleared → special-unit reward pick, then the expansion direction pick.
+# Area cleared → reward pick (magic cards after a wizard miniboss, special
+# unit cards otherwise), then the expansion direction pick.
 func _on_area_cleared(area_num: int) -> void:
 	var panel := _make_modal(96 + 3 * 64.0)
 	var title := Label.new()
-	title.text = "Area %d cleared! Choose a special unit card:" % area_num
 	title.add_theme_font_size_override("font_size", 17)
 	title.position = Vector2(20, 14)
 	panel.add_child(title)
 	var y := 52.0
-	for id in GameState.SPECIAL_UNITS:
-		var s: Dictionary = GameState.SPECIAL_UNITS[id]
-		var b := Button.new()
-		b.text = "%s — %s" % [s["title"], s["blurb"]]
-		b.position = Vector2(20, y)
-		b.size = Vector2(440, 56)
-		var picked_id: String = id
-		b.pressed.connect(func():
-			gs.grant_special(picked_id)
-			_open_expand_modal())
-		panel.add_child(b)
-		y += 64.0
+	if gs.last_area_wizard:
+		title.text = "Wizard defeated! Choose a MAGIC card:"
+		for option in gs.magic_options():
+			var b := Button.new()
+			b.text = "%s — %s" % [option["title"], option["blurb"]]
+			b.position = Vector2(20, y)
+			b.size = Vector2(440, 56)
+			var opt: Dictionary = option
+			b.pressed.connect(func():
+				gs.grant_magic(opt)
+				_open_expand_modal())
+			panel.add_child(b)
+			y += 64.0
+	else:
+		title.text = "Area %d cleared! Choose a special unit card:" % area_num
+		for id in GameState.SPECIAL_UNITS:
+			var s: Dictionary = GameState.SPECIAL_UNITS[id]
+			var b := Button.new()
+			b.text = "%s — %s" % [s["title"], s["blurb"]]
+			b.position = Vector2(20, y)
+			b.size = Vector2(440, 56)
+			var picked_id: String = id
+			b.pressed.connect(func():
+				gs.grant_special(picked_id)
+				_open_expand_modal())
+			panel.add_child(b)
+			y += 64.0
 
 func _open_expand_modal() -> void:
 	var panel := _make_modal(140)
@@ -1710,9 +1734,13 @@ func _on_card(card) -> void:
 		selected_cards.clear()
 		_open_choice_modal(card)
 		return
-	# Ritual cards (Plant Grove, Mass Excavation) use area targeting.
+	# Ritual cards use area targeting — except the instant ones (Call
+	# Ancestors / Descendents), which resolve on click.
 	if String(card.get("category", "")) == "ritual":
 		selected_cards.clear()
+		if String(card["id"]) in GameState.INSTANT_MAGIC:
+			gs.play_instant(card)
+			return
 		pending_card = card
 		mode = "ritual"
 		_on_changed()

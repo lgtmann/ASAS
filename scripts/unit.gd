@@ -27,6 +27,12 @@ var acted: bool = false
 # at the start of each own-team turn until complete; empty = idle.
 var task: Dictionary = {}
 
+# Wolves attack twice per turn — tracks the second (bonus) attack.
+var bonus_attack_used: bool = false
+# Convert Opponent: > 0 means this enemy fights for the player; ticks down at
+# each player turn start and reverts to the enemy team at 0.
+var converted_turns: int = 0
+
 # Operator upgrades — applied via upgrade cards, persistent for the run.
 var strength: bool = false              # +1 to dig depth / swing dmg / throw dmg
 var endurance: bool = false              # 2 actions per turn (turn-budget stub)

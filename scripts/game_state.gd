@@ -122,15 +122,38 @@ func start() -> void:
 	leader.kind = "leader"
 	leader.hp = 8
 	leader.max_hp = 8
-	var enemy_leader = _spawn_unit(1, world.surface_cell(2, 2), false)
-	enemy_leader.kind = "leader"
-	enemy_leader.hp = 8
-	enemy_leader.max_hp = 8
-	_spawn_unit(1, world.surface_cell(3, 2), true)
-	_spawn_unit(1, world.surface_cell(2, 3), true)
+	_spawn_enemy_force()
 	selected = leader
 	recompute_vision()
 	begin_turn()
+
+# Whether the area being played has a wizard miniboss (even-numbered areas).
+# Read at area-clear time to decide between unit and magic rewards.
+var last_area_wizard: bool = false
+
+# Spawn the enemy force for the current `area` in the far corner. Area 1 is a
+# plain leader + 2 operators; later areas mix in wolves and barbarians
+# (warrior / javelin kinds), and EVEN areas are led by a summoning wizard.
+func _spawn_enemy_force() -> void:
+	var is_boss: bool = (area % 2 == 0)
+	last_area_wizard = is_boss
+	var el = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
+	el.kind = "wizard" if is_boss else "leader"
+	el.hp = 6 + 2 * area + (2 if is_boss else 0)
+	el.max_hp = el.hp
+	var kinds := ["operator", "wolf", "warrior", "javelin"]
+	for i in (1 + area):
+		var kind: String = "operator"
+		if area >= 2:
+			kind = kinds[i % kinds.size()]
+		var m = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), kind != "wolf")
+		m.kind = kind
+		if kind == "wolf":
+			m.hp = 4
+			m.max_hp = 4
+		elif kind == "javelin" and m.spade != null:
+			# Barbarian javelin throwers keep their spade between throws.
+			m.spade.handle = "spade_boomerang"
 
 # Wrap `changed.emit()` so gravity + vision stay in sync without sprinkling
 # refreshes through every action.
@@ -181,8 +204,9 @@ func _check_game_over() -> void:
 # v1 behaviour: for each non-leader unit holding a spade, find the nearest
 # enemy; swing if adjacent, otherwise step toward them with move_to.
 func ai_step(team: int) -> bool:
-	# Operators are no longer energy-bound — each unit has 1 move + 1 action per
-	# turn. Loop ends when no team unit can do anything useful.
+	# One visible action per call. Per-kind behaviour: wolves bite (twice) and
+	# sprint, javelin throwers attack at range (boomerang spades), wizards
+	# summon minions, everyone else swings + advances.
 	if is_over:
 		return false
 	for u in units:
@@ -190,19 +214,43 @@ func ai_step(team: int) -> bool:
 			continue
 		if u.kind == "leader":
 			continue                          # leaders stand still in v1
-		if u.spade == null:
-			continue
-		if u.moved and u.acted:
+		var can_bonus: bool = (u.kind == "wolf" and not u.bonus_attack_used)
+		if u.moved and u.acted and not can_bonus:
 			continue
 		var target = _ai_nearest_enemy(u)
 		if target == null:
 			continue
 		var dist: int = _cheb3(u.grid, target.grid)
-		if dist == 1 and not u.acted:
-			swing_at(u, target.grid)
+		# Wizard miniboss: summon a wolf instead of fighting (capped force).
+		if u.kind == "wizard":
+			if not u.acted and team_alive_count(team) < 9:
+				var spot: Vector3i = _free_spot_near(u.grid.x, u.grid.z)
+				if unit_at(spot) == null and world.is_standable(spot):
+					var minion = _spawn_unit(team, spot, false)
+					minion.kind = "wolf"
+					minion.hp = 4
+					minion.max_hp = 4
+					u.acted = true
+					notice.emit("The wizard summons a wolf!")
+					_emit_changed()
+					return true
+			continue                          # wizards don't chase
+		# Melee when adjacent.
+		if dist == 1 and (not u.acted or can_bonus):
+			if u.spade != null and u.kind != "wolf":
+				swing_at(u, target.grid)
+			else:
+				bite(u, target)
+			return true
+		# Javelin barbarians attack from range (their spade boomerangs back).
+		if u.kind == "javelin" and u.spade != null and not u.acted \
+				and dist > 1 and dist <= throw_range_for(u):
+			throw_at(u, target.grid)
 			return true
 		if u.moved:
 			continue
+		if u.spade == null and u.kind != "wolf":
+			continue                          # spadeless humanoids hold position
 		var moves: Array = move_targets(u)
 		if moves.is_empty():
 			continue
@@ -426,8 +474,8 @@ func structure_targets(card) -> Array:
 	for u in units:
 		if not u.is_alive() or u.team != TEAM_PLAYER:
 			continue
-		if u.kind == "ranger":
-			continue          # rangers can't build
+		if u.kind == "javelin":
+			continue          # javelin throwers can't build
 		for dx in range(-1, 2):
 			for dy in range(-1, 2):
 				for dz in range(-1, 2):
@@ -487,7 +535,7 @@ func play_structure_at(card, cell: Vector3i) -> bool:
 # Special unit cards offered on area clear (pick 1 of 3).
 const SPECIAL_UNITS := {
 	"warrior": {"title": "Warrior", "cost": 2, "blurb": "+2 dmg; can't dig/chop"},
-	"ranger": {"title": "Ranger", "cost": 2, "blurb": "throw range +4; can't build"},
+	"javelin": {"title": "Javelin Thrower", "cost": 2, "blurb": "throw range +4; can't build"},
 	"plow": {"title": "Plow", "cost": 3, "blurb": "levels a 3-wide path as it moves"},
 }
 
@@ -526,13 +574,8 @@ func advance_area(direction: String) -> void:
 		var u = survivors[i]
 		u.grid = _free_spot_near(corner_x, corner_z)
 		u.draw_pos = Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
-	# Enemy force scales with the area number.
-	var el = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
-	el.kind = "leader"
-	el.hp = 6 + 2 * area
-	el.max_hp = el.hp
-	for i in (1 + area):
-		_spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), true)
+	# Enemy force scales with the area number (wizard miniboss on even areas).
+	_spawn_enemy_force()
 	active_team = TEAM_PLAYER
 	notice.emit("Entered area %d (%s). The enemy grows stronger…" % [area, direction])
 	begin_turn()
@@ -590,12 +633,84 @@ func apply_choice(card, option: Dictionary) -> void:
 			notice.emit("%s added to your hand." % option["title"])
 	_emit_changed()
 
+# ---------------------------------------------------------------- magic cards
+# Miniboss (wizard) rewards. All "ritual" category; ancestors/descendents are
+# instant (no target).
+const MAGIC_POOL := [
+	{"id": "raise_earth", "title": "Raise Earth", "cost": 2,
+		"blurb": "lift a 3x3 area +1"},
+	{"id": "lower_earth", "title": "Lower Earth", "cost": 2,
+		"blurb": "sink a 3x3 area -1"},
+	{"id": "call_ancestors", "title": "Call Ancestors", "cost": 1,
+		"blurb": "pull a card from discard"},
+	{"id": "call_descendents", "title": "Call Descendents", "cost": 1,
+		"blurb": "pull a card from draw pile"},
+	{"id": "convert_opponent", "title": "Convert Opponent", "cost": 4,
+		"blurb": "control an enemy for 2 turns"},
+]
+const INSTANT_MAGIC := ["call_ancestors", "call_descendents"]
+
+func magic_options() -> Array:
+	var pool: Array = MAGIC_POOL.duplicate()
+	pool.shuffle()
+	return pool.slice(0, 3)
+
+func grant_magic(option: Dictionary) -> void:
+	hand.append(_make_card(String(option["id"]), String(option["title"]),
+			int(option["cost"]), "ritual", String(option["blurb"])))
+	notice.emit("%s added to your hand." % option["title"])
+	_emit_changed()
+
+# Instant rituals — play on click, no targeting.
+func play_instant(card) -> bool:
+	if card == null or not hand.has(card):
+		return false
+	match String(card["id"]):
+		"call_ancestors":
+			if discard.is_empty():
+				notice.emit("Your discard pile is empty.")
+				return false
+			if not _spend(int(card["cost"])):
+				return false
+			var pick = discard[randi() % discard.size()]
+			discard.erase(pick)
+			hand.append(pick)
+			cards_drawn.emit(1)
+			notice.emit("The ancestors return %s to your hand." % pick["title"])
+		"call_descendents":
+			if draw_pile.is_empty():
+				notice.emit("Your draw pile is empty.")
+				return false
+			if not _spend(int(card["cost"])):
+				return false
+			var pick2 = draw_pile[randi() % draw_pile.size()]
+			draw_pile.erase(pick2)
+			hand.append(pick2)
+			cards_drawn.emit(1)
+			notice.emit("The descendents bring %s to your hand." % pick2["title"])
+		_:
+			return false
+	hand.erase(card)
+	discard.append(card)      # retain
+	_emit_changed()
+	return true
+
 # ---------------------------------------------------------------- ritual cards
 
 # Targets: standable surface cells within Chebyshev 3 (xz) of a friendly unit.
+# Convert Opponent instead targets enemy units within Chebyshev 4 of one.
 func ritual_targets(card) -> Array:
 	var out: Array = []
 	if card == null:
+		return out
+	if String(card["id"]) == "convert_opponent":
+		for e in units:
+			if not e.is_alive() or e.team != TEAM_ENEMY:
+				continue
+			for u in units:
+				if u.is_alive() and u.team == TEAM_PLAYER and _cheb3(u.grid, e.grid) <= 4:
+					out.append(e.grid)
+					break
 		return out
 	var seen_c: Dictionary = {}
 	for u in units:
@@ -663,6 +778,58 @@ func play_ritual_at(card, cell: Vector3i) -> bool:
 						dug += 1
 						break
 			notice.emit("Excavated %d tile(s)." % dug)
+		"raise_earth":
+			var raised: int = 0
+			for dx in range(-1, 2):
+				for dz in range(-1, 2):
+					var cx: int = cell.x + dx
+					var cz: int = cell.z + dz
+					if cx < 0 or cx >= world.SX or cz < 0 or cz >= world.SZ:
+						continue
+					# Top solid of the column grows by one block.
+					for y in range(world.SY - 1, -1, -1):
+						var p := Vector3i(cx, y, cz)
+						if not world.is_solid(p):
+							continue
+						var above := Vector3i(cx, y + 1, cz)
+						if above.y >= world.SY:
+							break
+						# A unit standing there rides the new block up.
+						var rider = unit_at(above)
+						if rider != null:
+							if above.y + 1 >= world.SY:
+								break
+							rider.grid = above + Vector3i(0, 1, 0)
+							rider.draw_pos = Vector3(rider.grid.x + 0.5, float(rider.grid.y), rider.grid.z + 0.5)
+						world.set_material(above, VoxelWorld.Mat.EARTH)
+						raised += 1
+						break
+			notice.emit("The earth rises — %d column(s) lifted." % raised)
+		"lower_earth":
+			var sunk: int = 0
+			for dx in range(-1, 2):
+				for dz in range(-1, 2):
+					var cx: int = cell.x + dx
+					var cz: int = cell.z + dz
+					if cx < 0 or cx >= world.SX or cz < 0 or cz >= world.SZ:
+						continue
+					for y in range(world.SY - 1, -1, -1):
+						var p := Vector3i(cx, y, cz)
+						if world.is_solid(p):
+							world.dig_cell(p)   # magic destroys, no materials
+							sunk += 1
+							break
+			notice.emit("The earth sinks — %d column(s) lowered." % sunk)
+		"convert_opponent":
+			var victim = unit_at(cell)
+			if victim == null or victim.team != TEAM_ENEMY:
+				notice.emit("No enemy there to convert.")
+				return false
+			victim.team = TEAM_PLAYER
+			victim.converted_turns = 2
+			victim.moved = false
+			victim.acted = false
+			notice.emit("%s fights for YOU for 2 turns!" % victim.kind.capitalize())
 	hand.erase(card)
 	discard.append(card)          # retain: cycles back through the deck
 	_emit_changed()
@@ -830,12 +997,14 @@ func _spawn_unit(team: int, p: Vector3i, give_spade: bool):
 		u.spade = s
 	return u
 
-# Reset every unit on `team` to a fresh per-turn budget (1 move + 1 action).
+# Reset every unit on `team` to a fresh per-turn budget (1 move + 1 action;
+# wolves also get their bonus attack back).
 func _refresh_team_budgets(team: int) -> void:
 	for u in units:
 		if u.is_alive() and u.team == team:
 			u.moved = false
 			u.acted = false
+			u.bonus_attack_used = false
 
 # Consume a unit's move slot for the turn. Returns false (with notice) if the
 # unit has already moved.
@@ -846,16 +1015,39 @@ func _consume_move(u) -> bool:
 	u.moved = true
 	return true
 
-# Same for the action slot (dig / swing / throw / pickup / special).
+# Same for the action slot (dig / swing / throw / pickup / special). Wolves
+# attack twice: the first consume sets `acted`, the second burns the bonus.
 func _consume_action(u) -> bool:
 	if u.acted:
+		if u.kind == "wolf" and not u.bonus_attack_used:
+			u.bonus_attack_used = true
+			return true
 		notice.emit("That unit already used their action this turn.")
 		return false
 	u.acted = true
 	return true
 
+# Innate melee for spadeless beasts (wolves) and converted units: 2 damage.
+func bite(u, target) -> void:
+	if target == null or not target.is_alive():
+		return
+	if not _consume_action(u):
+		return
+	_damage(target, 2)
+	notice.emit("%s attacks for 2." % u.kind.capitalize())
+	_emit_changed()
+
 func begin_turn() -> void:
 	energy = MAX_ENERGY
+	# Converted enemies tick down at the start of each player turn; at 0 they
+	# return to the enemy's side.
+	if active_team == TEAM_PLAYER:
+		for u in units:
+			if u.is_alive() and u.converted_turns > 0 and u.team == TEAM_PLAYER:
+				u.converted_turns -= 1
+				if u.converted_turns == 0:
+					u.team = TEAM_ENEMY
+					notice.emit("%s shakes off the spell and rejoins the enemy!" % u.kind.capitalize())
 	_refresh_team_budgets(active_team)
 	# Only the player has a hand of cards; enemies just act with their units.
 	if active_team == TEAM_PLAYER:
@@ -947,13 +1139,15 @@ func throw_range_for(u) -> int:
 	if u == null or u.spade == null:
 		return 0
 	var r: int = u.spade.throw_range
-	if u.kind == "ranger":
+	if u.kind == "javelin":
 		r += 4
 	return r
 
 func move_range_for(u) -> int:
 	var r: int = MOVE_RANGE
 	if u != null and u.team == TEAM_PLAYER and passives.has("swift_ops"):
+		r *= 2
+	if u != null and u.kind == "wolf":
 		r *= 2
 	return r
 
