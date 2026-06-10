@@ -23,6 +23,10 @@ var draw_pos: Vector3 = Vector3.ZERO
 var moved: bool = false
 var acted: bool = false
 
+# Standing work order, e.g. {"type": "harvest", "target": Vector3i}. Auto-run
+# at the start of each own-team turn until complete; empty = idle.
+var task: Dictionary = {}
+
 # Operator upgrades — applied via upgrade cards, persistent for the run.
 var strength: bool = false              # +1 to dig depth / swing dmg / throw dmg
 var endurance: bool = false              # 2 actions per turn (turn-budget stub)

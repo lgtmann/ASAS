@@ -91,6 +91,13 @@ var is_over: bool = false
 # Energy is still per-turn — these are persistent banks that fill over time.
 var oil: Array = [0, 0]   # oil[team] = barrels in the bank
 var wood: Array = [0, 0]  # wood[team] = logs in the bank (chopped trees)
+var earth: Array = [0, 0] # earth[team] = dirt in the bank (dug cells)
+
+# Run-progression passives gained from upgrade-choice cards ("exhaust" picks).
+var passives: Dictionary = {}
+# Player-built ballistas: [{grid: Vector3i, team: int}] — auto-fire at end of
+# their team's turn.
+var ballistas: Array = []
 
 # ---------------------------------------------------------------- setup
 
@@ -100,22 +107,21 @@ func setup(w) -> void:
 func start() -> void:
 	randomize()
 	_build_deck()
-	# Player base in one corner, enemy base across the map — RTS-scale spacing
-	# so the early game is exploration / build-up before contact.
-	var leader = _spawn_unit(0, world.surface_cell(2, 2), false)
+	# Player base in the near corner (closest to the screen in iso = highest
+	# x+z), enemy in the far corner. Player starts with ONLY the leader —
+	# operators come from cards.
+	var px: int = world.SX - 3
+	var pz: int = world.SZ - 3
+	var leader = _spawn_unit(0, world.surface_cell(px, pz), false)
 	leader.kind = "leader"
 	leader.hp = 8
 	leader.max_hp = 8
-	_spawn_unit(0, world.surface_cell(3, 2), true)
-	_spawn_unit(0, world.surface_cell(2, 3), true)
-	var ex: int = world.SX - 3
-	var ez: int = world.SZ - 3
-	var enemy_leader = _spawn_unit(1, world.surface_cell(ex, ez), false)
+	var enemy_leader = _spawn_unit(1, world.surface_cell(2, 2), false)
 	enemy_leader.kind = "leader"
 	enemy_leader.hp = 8
 	enemy_leader.max_hp = 8
-	_spawn_unit(1, world.surface_cell(ex - 1, ez), true)
-	_spawn_unit(1, world.surface_cell(ex, ez - 1), true)
+	_spawn_unit(1, world.surface_cell(3, 2), true)
+	_spawn_unit(1, world.surface_cell(2, 3), true)
 	selected = leader
 	recompute_vision()
 	begin_turn()
@@ -298,23 +304,28 @@ func _bresenham_xz(x0: int, z0: int, x1: int, z1: int) -> Array:
 		out.append(Vector2i(x, z))
 	return out
 
-# Starter deck is deliberately SIMPLE — operators, spades, and the three basic
-# head upgrades. Everything fancier is bought mid-game from the Build Bar with
-# banked wood / oil (see BLUEPRINTS + buy_blueprint).
-const STARTER_UPGRADES := ["spade_blade", "spade_pick", "spade_tip"]
-
+# Starter deck is deliberately MINIMAL — 3 operators + 3 spades. Power comes
+# from the Build Bar (materials) and from the upgrade-choice card that appears
+# every time the deck cycles (see _reshuffle_with_upgrade / CHOICE_POOL).
 func _build_deck() -> void:
 	draw_pile.clear()
 	hand.clear()
 	discard.clear()
-	for i in 4:
+	for i in 3:
 		draw_pile.append(_make_card("operator", "Operator", 2, "unit", "place adjacent"))
 	for i in 3:
 		draw_pile.append(_make_card("spade", "Spade", 1, "spade", "give to operator"))
-	for id in STARTER_UPGRADES:
-		var u: Dictionary = UPGRADES[id]
-		draw_pile.append(_make_card(id, u["title"], u["cost"], u["category"], u["blurb"]))
 	draw_pile.shuffle()
+
+# Reshuffle the discard into the draw pile; every completed cycle of the deck
+# also surfaces ONE upgrade-choice card as the next draw — the run-progression
+# beat ("pick 1 of 3").
+func _reshuffle_with_upgrade() -> void:
+	draw_pile = discard.duplicate()
+	discard.clear()
+	draw_pile.shuffle()
+	if not draw_pile.is_empty():
+		draw_pile.append(_make_card("upgrade_choice", "UPGRADE", 0, "choice", "pick 1 of 3"))
 
 # ---------------------------------------------------------------- Build Bar
 # Mid-game card acquisition: spend banked wood / oil to put a card straight
@@ -323,6 +334,8 @@ func _build_deck() -> void:
 const BLUEPRINTS := [
 	{"id": "ladder",  "wood": 2, "oil": 0},
 	{"id": "bridge",  "wood": 3, "oil": 0},
+	{"id": "ballista", "wood": 3, "oil": 0},
+	{"id": "dirt_wall", "wood": 0, "oil": 0, "earth": 2},
 	{"id": "spade_wings",            "wood": 2, "oil": 0},
 	{"id": "spade_dousing_rod",      "wood": 2, "oil": 0},
 	{"id": "double_barrel_spade",    "wood": 2, "oil": 0},
@@ -343,6 +356,8 @@ const BLUEPRINTS := [
 const STRUCTURES := {
 	"ladder": {"title": "Ladder", "cost": 1, "blurb": "climb walls"},
 	"bridge": {"title": "Bridge", "cost": 1, "blurb": "cross water"},
+	"ballista": {"title": "Ballista", "cost": 1, "blurb": "auto-fires r3, 2 dmg"},
+	"dirt_wall": {"title": "Dirt Wall", "cost": 1, "blurb": "raise an earth block"},
 }
 
 func blueprint_card_title(id: String) -> String:
@@ -351,7 +366,8 @@ func blueprint_card_title(id: String) -> String:
 	return String(UPGRADES.get(id, {}).get("title", id))
 
 func can_afford_blueprint(bp: Dictionary) -> bool:
-	return wood[TEAM_PLAYER] >= int(bp["wood"]) and oil[TEAM_PLAYER] >= int(bp["oil"])
+	return wood[TEAM_PLAYER] >= int(bp["wood"]) and oil[TEAM_PLAYER] >= int(bp["oil"]) \
+			and earth[TEAM_PLAYER] >= int(bp.get("earth", 0))
 
 func buy_blueprint(id: String) -> bool:
 	if is_over or active_team != TEAM_PLAYER:
@@ -368,6 +384,7 @@ func buy_blueprint(id: String) -> bool:
 		return false
 	wood[TEAM_PLAYER] -= int(bp["wood"])
 	oil[TEAM_PLAYER] -= int(bp["oil"])
+	earth[TEAM_PLAYER] -= int(bp.get("earth", 0))
 	var card: Dictionary
 	if STRUCTURES.has(id):
 		var s: Dictionary = STRUCTURES[id]
@@ -411,6 +428,10 @@ func structure_targets(card) -> Array:
 					elif id == "bridge":
 						if world.is_water(p + DOWN):
 							out.append(p)
+					elif id == "ballista" or id == "dirt_wall":
+						# Needs solid ground under it.
+						if world.is_solid(p + DOWN):
+							out.append(p)
 	return out
 
 func _ladder_mountable(p: Vector3i) -> bool:
@@ -434,10 +455,270 @@ func play_structure_at(card, cell: Vector3i) -> bool:
 	elif id == "bridge":
 		world.set_material(cell, VoxelWorld.Mat.BRIDGE)
 		notice.emit("Bridge built.")
+	elif id == "ballista":
+		world.set_material(cell, VoxelWorld.Mat.BALLISTA)
+		ballistas.append({"grid": cell, "team": TEAM_PLAYER})
+		notice.emit("Ballista built — fires automatically each turn.")
+	elif id == "dirt_wall":
+		world.set_material(cell, VoxelWorld.Mat.EARTH)
+		notice.emit("Dirt wall raised.")
 	hand.erase(card)
 	discard.append(card)     # stays in your deck — buy once, reuse forever
 	_emit_changed()
 	return true
+
+# ---------------------------------------------------------------- upgrade choices
+# Drawn when the deck cycles; playing one shows 3 of these. "passive" picks
+# apply immediately and exhaust; "card" picks add a reusable ritual card.
+const CHOICE_POOL := [
+	{"id": "swift_ops", "kind": "passive", "title": "Swift Operators",
+		"desc": "Operators move 2x per turn (exhaust)"},
+	{"id": "lumber_bonus", "kind": "passive", "title": "Efficient Lumber",
+		"desc": "+1 wood per tree cell chopped (exhaust)"},
+	{"id": "plant_grove", "kind": "card", "title": "Plant Grove",
+		"desc": "Spawn trees in an area (retain)"},
+	{"id": "mass_excavation", "kind": "card", "title": "Mass Excavation",
+		"desc": "Dig 5 tiles down one level (retain)"},
+]
+
+func choice_options() -> Array:
+	var pool: Array = []
+	for o in CHOICE_POOL:
+		if o["kind"] == "passive" and passives.has(o["id"]):
+			continue              # already owned — don't offer again
+		pool.append(o)
+	pool.shuffle()
+	return pool.slice(0, mini(3, pool.size()))
+
+func apply_choice(card, option: Dictionary) -> void:
+	if card == null or not hand.has(card):
+		return
+	hand.erase(card)              # the choice card itself always exhausts
+	match String(option["kind"]):
+		"passive":
+			passives[String(option["id"])] = true
+			notice.emit("Gained: %s" % option["title"])
+		"card":
+			hand.append(_make_card(String(option["id"]), String(option["title"]),
+					1, "ritual", String(option["desc"])))
+			notice.emit("%s added to your hand." % option["title"])
+	_emit_changed()
+
+# ---------------------------------------------------------------- ritual cards
+
+# Targets: standable surface cells within Chebyshev 3 (xz) of a friendly unit.
+func ritual_targets(card) -> Array:
+	var out: Array = []
+	if card == null:
+		return out
+	var seen_c: Dictionary = {}
+	for u in units:
+		if not u.is_alive() or u.team != TEAM_PLAYER:
+			continue
+		for dx in range(-3, 4):
+			for dz in range(-3, 4):
+				var cx: int = u.grid.x + dx
+				var cz: int = u.grid.z + dz
+				if cx < 0 or cx >= world.SX or cz < 0 or cz >= world.SZ:
+					continue
+				var p: Vector3i = world.surface_cell(cx, cz)
+				if not seen_c.has(p):
+					seen_c[p] = true
+					out.append(p)
+	return out
+
+func play_ritual_at(card, cell: Vector3i) -> bool:
+	if card == null or not hand.has(card):
+		return false
+	if not ritual_targets(card).has(cell):
+		notice.emit("Out of range for %s." % card["title"])
+		return false
+	if not _spend(int(card["cost"])):
+		return false
+	match String(card["id"]):
+		"plant_grove":
+			var planted: int = 0
+			var spots: Array = []
+			for dx in range(-1, 2):
+				for dz in range(-1, 2):
+					spots.append(Vector2i(cell.x + dx, cell.z + dz))
+			spots.shuffle()
+			for s in spots:
+				if planted >= 5:
+					break
+				if s.x < 0 or s.x >= world.SX or s.y < 0 or s.y >= world.SZ:
+					continue
+				var base: Vector3i = world.surface_cell(s.x, s.y)
+				if not world.is_air(base) or unit_at(base) != null:
+					continue
+				var fits: bool = true
+				for dy in VoxelWorld.TREE_HEIGHT:
+					var tp: Vector3i = base + Vector3i(0, dy, 0)
+					if not world.in_bounds(tp) or world.cells.has(tp):
+						fits = false
+						break
+				if not fits:
+					continue
+				for dy in VoxelWorld.TREE_HEIGHT:
+					world.set_material(base + Vector3i(0, dy, 0), VoxelWorld.Mat.TREE)
+				planted += 1
+			notice.emit("Grove planted — %d tree(s)." % planted)
+		"mass_excavation":
+			var dug: int = 0
+			for d in [Vector3i.ZERO, Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+				var cx: int = cell.x + d.x
+				var cz: int = cell.z + d.z
+				if cx < 0 or cx >= world.SX or cz < 0 or cz >= world.SZ:
+					continue
+				for y in range(world.SY - 1, -1, -1):
+					var p := Vector3i(cx, y, cz)
+					if world.is_solid(p):
+						_treasure_reward(world.dig_cell(p))
+						dug += 1
+						break
+			notice.emit("Excavated %d tile(s)." % dug)
+	hand.erase(card)
+	discard.append(card)          # retain: cycles back through the deck
+	_emit_changed()
+	return true
+
+# ---------------------------------------------------------------- ballistas
+
+# Fire every ballista belonging to `team`: nearest enemy within Chebyshev 3
+# takes 2 damage. Called at end of that team's turn.
+func _fire_ballistas(team: int) -> void:
+	for b in ballistas.duplicate():
+		var g: Vector3i = b["grid"]
+		if world.material_at(g) != VoxelWorld.Mat.BALLISTA:
+			ballistas.erase(b)    # demolished
+			continue
+		if int(b["team"]) != team:
+			continue
+		var best = null
+		var best_d: int = 99
+		for u in units:
+			if u.is_alive() and u.team != team:
+				var d: int = _cheb3(g, u.grid)
+				if d <= 3 and d < best_d:
+					best_d = d
+					best = u
+		if best != null:
+			spade_thrown.emit(g, best.grid, false)   # reuse the projectile arc
+			_damage(best, 2)
+			notice.emit("Ballista fires — 2 dmg!")
+
+# ---------------------------------------------------------------- worker tasks
+
+# All cells of the tree column containing `tree_cell` (walks to the base first).
+func tree_column_cells(tree_cell: Vector3i) -> Array:
+	var cells_out: Array = []
+	var base: Vector3i = tree_cell
+	if world.material_at(base) != VoxelWorld.Mat.TREE:
+		return cells_out
+	while world.material_at(base + DOWN) == VoxelWorld.Mat.TREE:
+		base += DOWN
+	var p: Vector3i = base
+	while world.material_at(p) == VoxelWorld.Mat.TREE:
+		cells_out.append(p)
+		p += Vector3i(0, 1, 0)
+	return cells_out
+
+# Standable cells from which a swing reaches some cell of the tree column.
+func _chop_positions(tree_cell: Vector3i) -> Dictionary:
+	var out: Dictionary = {}
+	for tc in tree_column_cells(tree_cell):
+		for d in DIRS:
+			var p: Vector3i = tc + d
+			if world.is_standable(p):
+				out[p] = true
+	return out
+
+# Multi-source BFS distance field flowing OUT from the goal cells over
+# standable terrain (ignores unit occupancy — it's an estimate).
+func _dist_field_to(goals: Dictionary) -> Dictionary:
+	var dist: Dictionary = {}
+	var queue: Array = []
+	for g in goals.keys():
+		dist[g] = 0
+		queue.append(g)
+	while not queue.is_empty():
+		var cur: Vector3i = queue.pop_front()
+		for d in DIRS:
+			for dy in [0, 1, -1]:
+				var np: Vector3i = cur + d + Vector3i(0, dy, 0)
+				if dist.has(np) or not world.is_standable(np):
+					continue
+				dist[np] = int(dist[cur]) + 1
+				queue.append(np)
+	return dist
+
+func harvest_steps(u, tree_cell: Vector3i) -> int:
+	var goals: Dictionary = _chop_positions(tree_cell)
+	if goals.is_empty():
+		return -1
+	if goals.has(u.grid):
+		return 0
+	var field: Dictionary = _dist_field_to(goals)
+	return int(field.get(u.grid, -1))
+
+# Estimated player-turns to walk there and chop (chop happens on the arrival
+# turn since move and action are separate budgets).
+func harvest_turns(u, tree_cell: Vector3i) -> int:
+	var steps: int = harvest_steps(u, tree_cell)
+	if steps < 0:
+		return -1
+	return maxi(1, int(ceil(float(steps) / float(move_range_for(u)))))
+
+func assign_harvest(u, tree_cell: Vector3i) -> void:
+	if u == null or u.spade == null:
+		notice.emit("Needs a spade to harvest.")
+		return
+	u.task = {"type": "harvest", "target": tree_cell}
+	notice.emit("Harvest assigned (~%d turn(s))." % harvest_turns(u, tree_cell))
+	_run_unit_task(u)             # start working right now
+	_emit_changed()
+
+func _run_tasks(team: int) -> void:
+	for u in units.duplicate():
+		if u.is_alive() and u.team == team and not u.task.is_empty():
+			_run_unit_task(u)
+
+func _run_unit_task(u) -> void:
+	if String(u.task.get("type", "")) != "harvest":
+		return
+	var target: Vector3i = u.task["target"]
+	var col: Array = tree_column_cells(target)
+	if col.is_empty():
+		u.task = {}
+		notice.emit("Harvest target is gone — task cleared.")
+		return
+	if _try_chop_adjacent(u, col):
+		return
+	# Walk toward the tree along the distance field, then try chopping again.
+	if not u.moved:
+		var field: Dictionary = _dist_field_to(_chop_positions(target))
+		var best: Vector3i = u.grid
+		var best_d: int = int(field.get(u.grid, 99999))
+		for m in move_targets(u):
+			var d: int = int(field.get(m, 99999))
+			if d < best_d:
+				best_d = d
+				best = m
+		if best != u.grid:
+			move_to(u, best)
+	_try_chop_adjacent(u, tree_column_cells(target))
+
+# Swing at the column if a cell is cardinally adjacent at the unit's level.
+# Returns true (and clears the task) when the chop lands.
+func _try_chop_adjacent(u, col: Array) -> bool:
+	if u.acted or u.spade == null:
+		return false
+	for tc in col:
+		if (tc - u.grid) in DIRS:
+			swing_at(u, tc)
+			u.task = {}
+			return true
+	return false
 
 func _make_card(id: String, title: String, cost: int, category: String, blurb: String) -> Dictionary:
 	_next_card_instance += 1
@@ -492,6 +773,8 @@ func begin_turn() -> void:
 		# First turn gets a larger hand so combos start firing immediately.
 		var target_size: int = FIRST_TURN_HAND if turn == 1 else HAND_SIZE
 		_draw_up(target_size)
+	# Standing work orders (auto-harvest etc.) run before the player gets control.
+	_run_tasks(active_team)
 	turn_started.emit(active_team)
 	_emit_changed()
 	if is_over:
@@ -502,8 +785,8 @@ func begin_turn() -> void:
 		notice.emit("Enemy turn %d…" % turn)
 
 func end_turn() -> void:
-	# Apply water current BEFORE the hand-off — units in the river drift
-	# downstream one cell, then the next team takes over.
+	# Ballistas volley, then the river current pushes — both before hand-off.
+	_fire_ballistas(active_team)
 	_apply_water_current()
 	# Hand off to the other side; turn counter ticks when wrapping to player.
 	active_team = TEAM_ENEMY if active_team == TEAM_PLAYER else TEAM_PLAYER
@@ -570,15 +853,22 @@ func _spend(n: int) -> bool:
 
 # --- target sets (cells a mode can act on; used for wireframe highlights) ---
 
+func move_range_for(u) -> int:
+	var r: int = MOVE_RANGE
+	if u != null and u.team == TEAM_PLAYER and passives.has("swift_ops"):
+		r *= 2
+	return r
+
 func move_targets(u) -> Array:
 	var out := []
 	if u == null or u.moved:
 		return out
+	var budget: int = move_range_for(u)
 	var dist := {u.grid: 0}
 	var queue := [u.grid]
 	while not queue.is_empty():
 		var cur: Vector3i = queue.pop_front()
-		if dist[cur] >= MOVE_RANGE:
+		if dist[cur] >= budget:
 			continue
 		for d in DIRS:
 			for dy in [0, 1, -1]:
@@ -1048,6 +1338,9 @@ func dig_at(u, cell: Vector3i) -> void:
 # Returns a short label of what was hit, for the notice line.
 func _treasure_reward(mat: int) -> String:
 	match mat:
+		VoxelWorld.Mat.EARTH:
+			earth[active_team] += 1
+			return "Earth (+1, bank=%d)" % earth[active_team]
 		VoxelWorld.Mat.GOLD:
 			energy += 1
 			return "Gold (+1 energy)"
@@ -1063,15 +1356,17 @@ func _treasure_reward(mat: int) -> String:
 			oil[active_team] += 1
 			return "Oil (+1 barrel, bank=%d)" % oil[active_team]
 		VoxelWorld.Mat.TREE:
-			wood[active_team] += 1
-			return "Chopped tree (+1 wood, bank=%d)" % wood[active_team]
+			# "Efficient Lumber" passive doubles the per-cell yield.
+			var amt: int = 1
+			if passives.has("lumber_bonus") and active_team == TEAM_PLAYER:
+				amt = 2
+			wood[active_team] += amt
+			return "Chopped tree (+%d wood, bank=%d)" % [amt, wood[active_team]]
 	return ""
 
 func _draw_one_card() -> bool:
 	if draw_pile.is_empty():
-		draw_pile = discard.duplicate()
-		discard.clear()
-		draw_pile.shuffle()
+		_reshuffle_with_upgrade()
 	if draw_pile.is_empty():
 		return false
 	hand.append(draw_pile.pop_back())
@@ -1397,9 +1692,7 @@ func _draw_up(n: int) -> void:
 	var drawn := 0
 	while hand.size() < n:
 		if draw_pile.is_empty():
-			draw_pile = discard.duplicate()
-			discard.clear()
-			draw_pile.shuffle()
+			_reshuffle_with_upgrade()
 		if draw_pile.is_empty():
 			break
 		hand.append(draw_pile.pop_back())

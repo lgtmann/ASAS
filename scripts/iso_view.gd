@@ -19,6 +19,7 @@ const MODE_COLORS := {
 	"place_operator": Color(0.55, 0.90, 1.00),
 	"upgrade": Color(1.00, 0.45, 1.00),
 	"place_structure": Color(0.85, 0.68, 0.35),
+	"ritual": Color(0.80, 0.55, 1.00),
 }
 
 # --- Card UI (frame + art + labels composite) -------------------------------
@@ -38,6 +39,8 @@ const CATEGORY_TINT := {
 	"handle": Color(1.00, 0.90, 0.75),
 	"operator_upgrade": Color(1.00, 0.85, 0.85),
 	"structure": Color(0.92, 0.82, 0.62),
+	"choice": Color(1.00, 0.95, 0.45),
+	"ritual": Color(0.80, 0.65, 1.00),
 }
 # Layout proportions inside the 2:3 card (matches the frame prompt I wrote).
 # Cost sits on the gem (top-left); title is centred across the whole plaque so
@@ -123,6 +126,7 @@ var discard_pile_label: Label
 var sim_btn: Button
 var restart_btn: Button
 var build_buttons: Dictionary = {}     # blueprint id -> Button (Build Bar)
+var _modal: Panel = null               # active modal (choice / harvest confirm)
 var context_buttons: Array = []
 var _pending_anim_count: int = 0       # newly-drawn cards to slide in
 var _ai_running: bool = false          # locks player input while AI is acting
@@ -178,6 +182,7 @@ func _ready() -> void:
 	_mat_colors[VoxelWorld.Mat.TREE] = Color(0.30, 0.45, 0.22)
 	_mat_colors[VoxelWorld.Mat.LADDER] = Color(0.78, 0.62, 0.38)
 	_mat_colors[VoxelWorld.Mat.BRIDGE] = Color(0.62, 0.45, 0.28)
+	_mat_colors[VoxelWorld.Mat.BALLISTA] = Color(0.38, 0.30, 0.24)
 
 	gs = GameState.new()
 	gs.setup(world)
@@ -200,7 +205,15 @@ func _ready() -> void:
 	_build_hud()
 	gs.start()
 	_select(gs.selected)
+	# Player base is in the near corner — pan the camera so it starts centred.
+	if gs.selected != null:
+		_center_on(gs.selected.grid)
 	queue_redraw()
+
+# Pan the view so grid cell `g` lands mid-screen.
+func _center_on(g: Vector3i) -> void:
+	var target: Vector2 = iso_pt(float(g.x) + 0.5, float(g.y), float(g.z) + 0.5)
+	position = Vector2(800, 420) - target * zoom
 
 # ---------------------------------------------------------------- iso math
 
@@ -344,7 +357,8 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 
 	# Trees and player-built structures are surface features — always visible
 	# (no fog grey) and never faded.
-	if mat == VoxelWorld.Mat.TREE or mat == VoxelWorld.Mat.LADDER or mat == VoxelWorld.Mat.BRIDGE:
+	if mat == VoxelWorld.Mat.TREE or mat == VoxelWorld.Mat.LADDER \
+			or mat == VoxelWorld.Mat.BRIDGE or mat == VoxelWorld.Mat.BALLISTA:
 		seen_it = true
 		alpha = 1.0
 	# Solid path. The vast majority of cells are uniform-colour materials with a
@@ -845,15 +859,22 @@ func _on_click(p: Vector2) -> void:
 	# button needed. The Dig button still exists for precise two-step digs.
 	if mode == "move" and gs.selected != null and gs.selected.team == 0:
 		var cands: Dictionary = gs.harvest_candidates(gs.selected)
-		if cands.is_empty():
+		var cell = _pick_cell_in(p, cands.keys()) if not cands.is_empty() else null
+		if cell != null:
+			if cands[cell] == "chop":
+				gs.swing_at(gs.selected, cell)
+			else:
+				gs.dig_at(gs.selected, cell)
 			return
-		var cell = _pick_cell_in(p, cands.keys())
-		if cell == null:
-			return
-		if cands[cell] == "chop":
-			gs.swing_at(gs.selected, cell)
-		else:
-			gs.dig_at(gs.selected, cell)
+		# Distant tree → propose an auto-harvest task with a turn estimate.
+		if gs.selected.spade != null and gs.selected.kind == "operator":
+			var trees: Array = []
+			for cell_v in world.cells.keys():
+				if world.cells[cell_v] == VoxelWorld.Mat.TREE:
+					trees.append(cell_v)
+			var tcell = _pick_cell_in(p, trees)
+			if tcell != null:
+				_open_harvest_confirm(gs.selected, tcell)
 
 func _pick_target(p: Vector2):
 	return _pick_cell_in(p, targets)
@@ -900,6 +921,12 @@ func _act_on(cell) -> void:
 		pending_card = null
 		mode = "move"
 		gs.play_structure_at(card, cell)
+		return
+	if mode == "ritual":
+		var card = pending_card
+		pending_card = null
+		mode = "move"
+		gs.play_ritual_at(card, cell)
 		return
 	# Combo play takes priority over single-unit actions.
 	if not selected_cards.is_empty():
@@ -949,6 +976,8 @@ func _set_mode(m: String) -> void:
 func _targets_for_mode() -> Array:
 	if mode == "place_structure":
 		return gs.structure_targets(pending_card)
+	if mode == "ritual":
+		return gs.ritual_targets(pending_card)
 	if not selected_cards.is_empty():
 		return gs.combo_targets(selected_cards)
 	var u = gs.selected
@@ -1090,12 +1119,86 @@ func _build_hud() -> void:
 	view_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_3d.tscn"))
 	hud.add_child(view_btn)
 
+# ---------------------------------------------------------------- modals
+
+func _close_modal() -> void:
+	if _modal != null:
+		_modal.queue_free()
+		_modal = null
+
+func _make_modal(height: float) -> Panel:
+	_close_modal()
+	_modal = Panel.new()
+	_modal.position = Vector2(560, 280)
+	_modal.size = Vector2(480, height)
+	hud.add_child(_modal)
+	return _modal
+
+# Pick-1-of-3 for an upgrade-choice card. Options are rolled once and stored
+# on the card so closing/reopening doesn't reroll.
+func _open_choice_modal(card) -> void:
+	if not card.has("options"):
+		card["options"] = gs.choice_options()
+	var panel := _make_modal(90 + card["options"].size() * 64.0)
+	var title := Label.new()
+	title.text = "Choose an upgrade"
+	title.add_theme_font_size_override("font_size", 18)
+	title.position = Vector2(20, 14)
+	panel.add_child(title)
+	var y := 52.0
+	for option in card["options"]:
+		var b := Button.new()
+		b.text = "%s\n%s" % [option["title"], option["desc"]]
+		b.position = Vector2(20, y)
+		b.size = Vector2(440, 56)
+		b.pressed.connect(func():
+			gs.apply_choice(card, option)
+			_close_modal())
+		panel.add_child(b)
+		y += 64.0
+	var cancel := Button.new()
+	cancel.text = "Later"
+	cancel.position = Vector2(380, 14)
+	cancel.size = Vector2(80, 28)
+	cancel.pressed.connect(_close_modal)
+	panel.add_child(cancel)
+
+# Confirm dialog for a distant-tree harvest task.
+func _open_harvest_confirm(u, tree_cell: Vector3i) -> void:
+	var turns: int = gs.harvest_turns(u, tree_cell)
+	if turns < 0:
+		gs.notice.emit("That tree can't be reached.")
+		return
+	var panel := _make_modal(120)
+	var lbl := Label.new()
+	lbl.text = "Harvest this tree: ~%d turn(s).\nOperator will walk there and chop automatically." % turns
+	lbl.position = Vector2(20, 14)
+	lbl.size = Vector2(440, 50)
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(lbl)
+	var ok := Button.new()
+	ok.text = "Confirm"
+	ok.position = Vector2(120, 76)
+	ok.size = Vector2(110, 32)
+	ok.pressed.connect(func():
+		gs.assign_harvest(u, tree_cell)
+		_close_modal())
+	panel.add_child(ok)
+	var no := Button.new()
+	no.text = "Cancel"
+	no.position = Vector2(250, 76)
+	no.size = Vector2(110, 32)
+	no.pressed.connect(_close_modal)
+	panel.add_child(no)
+
 func _bp_cost_label(bp: Dictionary) -> String:
 	var parts: Array = []
 	if int(bp["wood"]) > 0:
 		parts.append("%dw" % int(bp["wood"]))
 	if int(bp["oil"]) > 0:
 		parts.append("%do" % int(bp["oil"]))
+	if int(bp.get("earth", 0)) > 0:
+		parts.append("%de" % int(bp.get("earth", 0)))
 	return " ".join(parts)
 
 func _pile_panel(pos: Vector2) -> Panel:
@@ -1210,10 +1313,11 @@ func _refresh_info() -> void:
 		var held := "spade" if u.spade != null else "no spade"
 		who = "%s  HP %d/%d  (%s)" % [u.kind, u.hp, u.max_hp, held]
 	var team_label := "PLAYER" if gs.active_team == GameState.TEAM_PLAYER else "ENEMY"
-	info_label.text = "Turn %d   %s   Energy %d/%d   Oil %d   Wood %d   Selected: %s   [mode: %s]" % \
+	info_label.text = "Turn %d   %s   Energy %d/%d   Wood %d   Earth %d   Oil %d   Selected: %s   [mode: %s]" % \
 		[gs.turn, team_label, gs.energy, GameState.MAX_ENERGY,
-			int(gs.oil[GameState.TEAM_PLAYER]),
 			int(gs.wood[GameState.TEAM_PLAYER]),
+			int(gs.earth[GameState.TEAM_PLAYER]),
+			int(gs.oil[GameState.TEAM_PLAYER]),
 			who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
 		end_turn_btn.disabled = gs.is_over or _ai_running or gs.active_team != GameState.TEAM_PLAYER
@@ -1496,6 +1600,25 @@ func _make_card_button(card: Dictionary, x: float, y: float, cb: Callable) -> Bu
 
 func _on_card(card) -> void:
 	if _ai_running or _combo_animating:
+		return
+	# Upgrade-choice cards open the pick-1-of-3 modal.
+	if String(card.get("category", "")) == "choice":
+		selected_cards.clear()
+		_open_choice_modal(card)
+		return
+	# Ritual cards (Plant Grove, Mass Excavation) use area targeting.
+	if String(card.get("category", "")) == "ritual":
+		selected_cards.clear()
+		pending_card = card
+		mode = "ritual"
+		_on_changed()
+		if targets.is_empty():
+			gs.notice.emit("No valid target for %s." % card["title"])
+			pending_card = null
+			mode = "move"
+			_on_changed()
+		else:
+			gs.notice.emit("Pick a target tile for %s." % card["title"])
 		return
 	# Structure cards (ladder / bridge) place directly — not part of combos.
 	if String(card.get("category", "")) == "structure":
