@@ -60,6 +60,7 @@ const UPGRADES := {
 	"endurance":             {"title": "Endurance",           "cost": 2, "category": "operator_upgrade", "blurb": "2 actions/turn (stub)"},
 	"strength":              {"title": "Strength",            "cost": 2, "category": "operator_upgrade", "blurb": "+1 dig/swing/throw"},
 	"hand_eye":              {"title": "Hand-Eye Coord",      "cost": 2, "category": "operator_upgrade", "blurb": "catch thrown spades (stub)"},
+	"fishing_pole":          {"title": "Fishing Pole",        "cost": 1, "category": "operator_upgrade", "blurb": "Fish food from water"},
 }
 
 var world = null
@@ -98,6 +99,11 @@ var _area_clear_emitted: bool = false
 var oil: Array = [0, 0]   # oil[team] = barrels in the bank
 var wood: Array = [0, 0]  # wood[team] = logs in the bank (chopped trees)
 var earth: Array = [0, 0] # earth[team] = dirt in the bank (dug cells)
+var stone: Array = [0, 0] # stone[team] = rocks in the bank (smashed boulders)
+
+# Built structures with per-kind behaviour: grid -> {kind, team, timer}.
+# (Ballistas predate this registry and keep their own list.)
+var buildings: Dictionary = {}
 
 # Run-progression passives gained from upgrade-choice cards ("exhaust" picks).
 var passives: Dictionary = {}
@@ -446,6 +452,15 @@ const BLUEPRINTS := [
 	{"id": "bridge",  "wood": 3, "oil": 0},
 	{"id": "ballista", "wood": 3, "oil": 0},
 	{"id": "dirt_wall", "wood": 0, "oil": 0, "earth": 2},
+	{"id": "waterwheel", "wood": 3, "oil": 0},
+	{"id": "storehouse", "wood": 5, "oil": 0},
+	{"id": "village", "wood": 2, "oil": 0, "earth": 3},
+	{"id": "trebuchet", "wood": 10, "oil": 0},
+	{"id": "farm", "wood": 1, "oil": 0, "earth": 4},
+	{"id": "campsite", "wood": 0, "oil": 0, "earth": 1, "stone": 1},
+	{"id": "barracks", "wood": 8, "oil": 0},
+	{"id": "fishing_pole", "wood": 1, "oil": 0},
+	{"id": "boat", "wood": 3, "oil": 0},
 	{"id": "spade_wings",            "wood": 2, "oil": 0},
 	{"id": "spade_dousing_rod",      "wood": 2, "oil": 0},
 	{"id": "double_barrel_spade",    "wood": 2, "oil": 0},
@@ -468,7 +483,18 @@ const STRUCTURES := {
 	"bridge": {"title": "Bridge", "cost": 1, "blurb": "cross water"},
 	"ballista": {"title": "Ballista", "cost": 1, "blurb": "manned: fires r3, 2 dmg"},
 	"dirt_wall": {"title": "Dirt Wall", "cost": 1, "blurb": "raise an earth block"},
+	"waterwheel": {"title": "Waterwheel", "cost": 1, "blurb": "+1 energy/turn (needs river)"},
+	"storehouse": {"title": "Storehouse", "cost": 1, "blurb": "+1 hand size"},
+	"village": {"title": "Village", "cost": 1, "blurb": "spawns operator / 2 turns"},
+	"trebuchet": {"title": "Trebuchet", "cost": 1, "blurb": "3 crew: AOE + levels walls"},
+	"farm": {"title": "Farm", "cost": 1, "blurb": "+1 food card / 2 turns"},
+	"campsite": {"title": "Campsite", "cost": 1, "blurb": "food becomes cooked (+1 heal)"},
+	"barracks": {"title": "Barracks", "cost": 1, "blurb": "warriors +1 dmg"},
+	"boat": {"title": "Boat", "cost": 1, "blurb": "water-only, huge movement"},
 }
+# Buildings that live in the `buildings` registry (Mat.BUILDING cells).
+const REGISTERED_BUILDINGS := ["waterwheel", "storehouse", "village", "trebuchet",
+		"farm", "campsite", "barracks"]
 
 func blueprint_card_title(id: String) -> String:
 	if STRUCTURES.has(id):
@@ -477,7 +503,8 @@ func blueprint_card_title(id: String) -> String:
 
 func can_afford_blueprint(bp: Dictionary) -> bool:
 	return wood[TEAM_PLAYER] >= int(bp["wood"]) and oil[TEAM_PLAYER] >= int(bp["oil"]) \
-			and earth[TEAM_PLAYER] >= int(bp.get("earth", 0))
+			and earth[TEAM_PLAYER] >= int(bp.get("earth", 0)) \
+			and stone[TEAM_PLAYER] >= int(bp.get("stone", 0))
 
 func buy_blueprint(id: String) -> bool:
 	if is_over or active_team != TEAM_PLAYER:
@@ -495,6 +522,7 @@ func buy_blueprint(id: String) -> bool:
 	wood[TEAM_PLAYER] -= int(bp["wood"])
 	oil[TEAM_PLAYER] -= int(bp["oil"])
 	earth[TEAM_PLAYER] -= int(bp.get("earth", 0))
+	stone[TEAM_PLAYER] -= int(bp.get("stone", 0))
 	var card: Dictionary
 	if STRUCTURES.has(id):
 		var s: Dictionary = STRUCTURES[id]
@@ -532,7 +560,9 @@ func structure_targets(card) -> Array:
 					if seen_cells.has(p) or not world.in_bounds(p):
 						continue
 					seen_cells[p] = true
-					if not world.is_air(p) or unit_at(p) != null:
+					if unit_at(p) != null:
+						continue
+					if not world.is_air(p) and not (id == "boat" and world.is_water(p)):
 						continue
 					if id == "ladder":
 						if _ladder_mountable(p):
@@ -540,11 +570,27 @@ func structure_targets(card) -> Array:
 					elif id == "bridge":
 						if world.is_water(p + DOWN):
 							out.append(p)
-					elif id == "ballista" or id == "dirt_wall":
+					elif id == "waterwheel":
+						# Must hug flowing water: ground cell with a water neighbour.
+						if world.is_solid(p + DOWN) and _adjacent_to_water(p):
+							out.append(p)
+					elif id == "boat":
+						# Boats launch ONTO a water cell.
+						if world.is_water(p):
+							out.append(p)
+					elif id == "ballista" or id == "dirt_wall" or id in REGISTERED_BUILDINGS:
 						# Needs solid ground under it.
 						if world.is_solid(p + DOWN):
 							out.append(p)
 	return out
+
+func _adjacent_to_water(p: Vector3i) -> bool:
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			for dz in range(-1, 2):
+				if world.is_water(p + Vector3i(dx, dy, dz)):
+					return true
+	return false
 
 func _ladder_mountable(p: Vector3i) -> bool:
 	for d in DIRS:
@@ -574,6 +620,18 @@ func play_structure_at(card, cell: Vector3i) -> bool:
 	elif id == "dirt_wall":
 		world.set_material(cell, VoxelWorld.Mat.EARTH)
 		notice.emit("Dirt wall raised.")
+	elif id == "boat":
+		var boat = _spawn_unit(TEAM_PLAYER, cell, false)
+		boat.kind = "boat"
+		boat.hp = 6
+		boat.max_hp = 6
+		notice.emit("Boat launched.")
+	elif id in REGISTERED_BUILDINGS:
+		world.set_material(cell, VoxelWorld.Mat.BUILDING)
+		buildings[cell] = {"kind": id, "team": TEAM_PLAYER, "timer": 2}
+		notice.emit("%s built." % STRUCTURES[id]["title"])
+		if id == "campsite":
+			_cook_all_food()
 	hand.erase(card)
 	discard.append(card)     # stays in your deck — buy once, reuse forever
 	_emit_changed()
@@ -604,6 +662,7 @@ func advance_area(direction: String) -> void:
 	_area_clear_emitted = false
 	dropped.clear()
 	ballistas.clear()
+	buildings.clear()
 	pending_card_cleanup()
 	world.generate()
 	world.version += 1
@@ -696,6 +755,8 @@ const MAGIC_POOL := [
 		"blurb": "pull a card from draw pile"},
 	{"id": "convert_opponent", "title": "Convert Opponent", "cost": 4,
 		"blurb": "control an enemy for 2 turns"},
+	{"id": "call_lightning", "title": "Call Lightning", "cost": 6,
+		"blurb": "5 dmg to any enemy"},
 ]
 const INSTANT_MAGIC := ["call_ancestors", "call_descendents"]
 
@@ -751,6 +812,17 @@ func play_instant(card) -> bool:
 func ritual_targets(card) -> Array:
 	var out: Array = []
 	if card == null:
+		return out
+	# Food heals any friendly unit; lightning strikes any visible enemy.
+	if String(card["id"]) in ["food", "cooked_food"]:
+		for u in units:
+			if u.is_alive() and u.team == TEAM_PLAYER:
+				out.append(u.grid)
+		return out
+	if String(card["id"]) == "call_lightning":
+		for e in units:
+			if e.is_alive() and e.team == TEAM_ENEMY:
+				out.append(e.grid)
 		return out
 	if String(card["id"]) == "convert_opponent":
 		for e in units:
@@ -869,6 +941,25 @@ func play_ritual_at(card, cell: Vector3i) -> bool:
 							sunk += 1
 							break
 			notice.emit("The earth sinks — %d column(s) lowered." % sunk)
+		"food", "cooked_food":
+			var ally = unit_at(cell)
+			if ally == null or ally.team != TEAM_PLAYER:
+				notice.emit("No friendly unit there.")
+				return false
+			var heal: int = 2 if String(card["id"]) == "cooked_food" else 1
+			ally.hp = mini(ally.max_hp, ally.hp + heal)
+			notice.emit("%s heals %d hp." % [ally.kind.capitalize(), heal])
+			hand.erase(card)      # consumed — food exhausts, no discard
+			_emit_changed()
+			return true
+		"call_lightning":
+			var victim2 = unit_at(cell)
+			if victim2 == null or victim2.team != TEAM_ENEMY:
+				notice.emit("No enemy there.")
+				return false
+			spade_thrown.emit(Vector3i(cell.x, world.SY - 1, cell.z), cell, false)
+			_damage(victim2, 5)
+			notice.emit("LIGHTNING strikes for 5!")
 		"convert_opponent":
 			var victim = unit_at(cell)
 			if victim == null or victim.team != TEAM_ENEMY:
@@ -919,6 +1010,129 @@ func _fire_ballistas(team: int) -> void:
 			spade_thrown.emit(g, best.grid, false)   # reuse the projectile arc
 			_damage(best, 2)
 			notice.emit("Ballista fires — 2 dmg!")
+
+# ---------------------------------------------------------------- buildings
+
+func _count_buildings(team: int, kind: String) -> int:
+	var n := 0
+	for cell in buildings:
+		var b: Dictionary = buildings[cell]
+		if int(b["team"]) == team and String(b["kind"]) == kind \
+				and world.material_at(cell) == VoxelWorld.Mat.BUILDING:
+			n += 1
+	return n
+
+# Per-player-turn building effects. Also prunes demolished entries.
+func _tick_buildings() -> void:
+	for cell in buildings.keys().duplicate():
+		if world.material_at(cell) != VoxelWorld.Mat.BUILDING:
+			buildings.erase(cell)
+			continue
+		var b: Dictionary = buildings[cell]
+		if int(b["team"]) != TEAM_PLAYER:
+			continue
+		match String(b["kind"]):
+			"waterwheel":
+				# Only spins beside live water.
+				if _adjacent_to_water(cell):
+					energy += 1
+					notice.emit("Waterwheel: +1 energy.")
+			"village":
+				b["timer"] = int(b["timer"]) - 1
+				if int(b["timer"]) <= 0:
+					b["timer"] = 2
+					var spot: Vector3i = _free_spot_near(cell.x, cell.z)
+					if world.is_standable(spot) and unit_at(spot) == null:
+						var op = _spawn_unit(TEAM_PLAYER, spot, false)
+						op.kind = "operator"
+						notice.emit("The village raises a new operator.")
+			"farm":
+				b["timer"] = int(b["timer"]) - 1
+				if int(b["timer"]) <= 0:
+					b["timer"] = 2
+					hand.append(_make_food_card(_count_buildings(TEAM_PLAYER, "campsite") > 0))
+					cards_drawn.emit(1)
+					notice.emit("Harvest! A food card joins your hand.")
+			"campsite":
+				_cook_all_food()
+
+func _make_food_card(cooked: bool) -> Dictionary:
+	if cooked:
+		return _make_card("cooked_food", "Cooked Food", 0, "ritual", "heal a unit +2")
+	return _make_card("food", "Food", 0, "ritual", "heal a unit +1")
+
+# Campsite: every raw food card anywhere in the deck becomes cooked food.
+func _cook_all_food() -> void:
+	var cooked: int = 0
+	for pile in [hand, draw_pile, discard]:
+		for c in pile:
+			if String(c["id"]) == "food":
+				c["id"] = "cooked_food"
+				c["title"] = "Cooked Food"
+				c["blurb"] = "heal a unit +2"
+				cooked += 1
+	if cooked > 0:
+		notice.emit("Campsite cooks %d food card(s)." % cooked)
+
+# Trebuchets need a 3-unit crew within Chebyshev 1. They lob at the nearest
+# enemy within range 5: 3 AOE damage to enemies within r1 of the impact, and
+# the 3x3 columns around it are levelled one block.
+func _fire_trebuchets(team: int) -> void:
+	for cell in buildings.keys().duplicate():
+		var b: Dictionary = buildings[cell]
+		if String(b["kind"]) != "trebuchet" or int(b["team"]) != team:
+			continue
+		if world.material_at(cell) != VoxelWorld.Mat.BUILDING:
+			buildings.erase(cell)
+			continue
+		var crew: int = 0
+		for u in units:
+			if u.is_alive() and u.team == team and _cheb3(u.grid, cell) == 1:
+				crew += 1
+		if crew < 3:
+			continue
+		var best = null
+		var best_d: int = 99
+		for u in units:
+			if u.is_alive() and u.team != team:
+				var d: int = _cheb3(cell, u.grid)
+				if d <= 5 and d < best_d:
+					best_d = d
+					best = u
+		if best == null:
+			continue
+		var impact: Vector3i = best.grid
+		spade_thrown.emit(cell, impact, false)
+		for u in units.duplicate():
+			if u.is_alive() and u.team != team and _cheb3(u.grid, impact) <= 1:
+				_damage(u, 3)
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var cx: int = impact.x + dx
+				var cz: int = impact.z + dz
+				if cx < 0 or cx >= world.SX or cz < 0 or cz >= world.SZ:
+					continue
+				for y in range(world.SY - 1, -1, -1):
+					var p := Vector3i(cx, y, cz)
+					if world.is_solid(p):
+						world.dig_cell(p)
+						break
+		notice.emit("TREBUCHET strike — 3 AOE dmg, walls levelled!")
+
+# Fishing: a unit with a fishing pole next to water reels in a food card.
+func fish(u) -> void:
+	if u == null or not u.has_fishing_pole:
+		notice.emit("Needs a fishing pole.")
+		return
+	if not _adjacent_to_water(u.grid):
+		notice.emit("No water within reach.")
+		return
+	if not _consume_action(u):
+		return
+	hand.append(_make_food_card(_count_buildings(TEAM_PLAYER, "campsite") > 0))
+	cards_drawn.emit(1)
+	notice.emit("Caught something — food card added.")
+	_emit_changed()
 
 # ---------------------------------------------------------------- worker tasks
 
@@ -1111,8 +1325,10 @@ func begin_turn() -> void:
 	_refresh_team_budgets(active_team)
 	# Only the player has a hand of cards; enemies just act with their units.
 	if active_team == TEAM_PLAYER:
-		# First turn gets a larger hand so combos start firing immediately.
+		_tick_buildings()
+		# First turn gets a larger hand; storehouses raise the cap permanently.
 		var target_size: int = FIRST_TURN_HAND if turn == 1 else HAND_SIZE
+		target_size += _count_buildings(TEAM_PLAYER, "storehouse")
 		_draw_up(target_size)
 	# Standing work orders (auto-harvest etc.) run before the player gets control.
 	_run_tasks(active_team)
@@ -1126,8 +1342,9 @@ func begin_turn() -> void:
 		notice.emit("Enemy turn %d…" % turn)
 
 func end_turn() -> void:
-	# Ballistas volley, then the river current pushes — both before hand-off.
+	# Siege engines volley, then the river current pushes — all before hand-off.
 	_fire_ballistas(active_team)
+	_fire_trebuchets(active_team)
 	_apply_water_current()
 	# Hand off to the other side; turn counter ticks when wrapping to player.
 	active_team = TEAM_ENEMY if active_team == TEAM_PLAYER else TEAM_PLAYER
@@ -1209,6 +1426,8 @@ func move_range_for(u) -> int:
 		r *= 2
 	if u != null and u.kind == "wolf":
 		r *= 2
+	if u != null and u.kind == "boat":
+		r = 8      # the current adds the downstream/upstream asymmetry
 	return r
 
 func move_targets(u) -> Array:
@@ -1216,6 +1435,7 @@ func move_targets(u) -> Array:
 	if u == null or u.moved:
 		return out
 	var budget: int = move_range_for(u)
+	var boat: bool = (u.kind == "boat")
 	var dist := {u.grid: 0}
 	var queue := [u.grid]
 	while not queue.is_empty():
@@ -1226,6 +1446,8 @@ func move_targets(u) -> Array:
 			for dy in [0, 1, -1]:
 				var np: Vector3i = cur + d + Vector3i(0, dy, 0)
 				if dist.has(np):
+					continue
+				if boat and not world.is_water(np):
 					continue
 				if world.is_standable(np) and unit_at(np) == null:
 					dist[np] = dist[cur] + 1
@@ -1542,6 +1764,7 @@ func _already_has(u, id: String) -> bool:
 		"endurance": return u.endurance
 		"dual_wield": return u.dual_wield
 		"hand_eye": return u.hand_eye
+		"fishing_pole": return u.has_fishing_pole
 	return false
 
 func play_upgrade_at(card, target_cell: Vector3i) -> void:
@@ -1592,6 +1815,7 @@ func _apply_operator_upgrade(u, id: String) -> void:
 		"endurance": u.endurance = true
 		"dual_wield": u.dual_wield = true
 		"hand_eye": u.hand_eye = true
+		"fishing_pole": u.has_fishing_pole = true
 
 func _reveal_material(mat: int) -> void:
 	for c in world.cells:
@@ -1775,6 +1999,9 @@ func _treasure_reward(mat: int) -> String:
 				amt = 2
 			wood[active_team] += amt
 			return "Chopped tree (+%d wood, bank=%d)" % [amt, wood[active_team]]
+		VoxelWorld.Mat.STONE:
+			stone[active_team] += 1
+			return "Smashed boulder (+1 stone, bank=%d)" % stone[active_team]
 	return ""
 
 func _draw_one_card() -> bool:
@@ -1923,6 +2150,8 @@ func swing_at(u, cell: Vector3i) -> void:
 	# Base swing damage + Strength + Warrior bonus + head-type bonus.
 	var base: int = u.spade.swing_dmg + (1 if u.strength else 0) \
 			+ (2 if u.kind == "warrior" else 0)
+	if u.kind == "warrior" and _count_buildings(u.team, "barracks") > 0:
+		base += 1      # barracks drill their warriors
 	var enemy = unit_at(cell)
 	if enemy != null and enemy.team != u.team:
 		if not _consume_action(u):

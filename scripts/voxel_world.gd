@@ -13,7 +13,7 @@ signal cells_changed
 # for caches (vision recompute skips when version + unit positions match).
 var version: int = 0
 
-enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE, LADDER, BRIDGE, BALLISTA }
+enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE, LADDER, BRIDGE, BALLISTA, BUILDING }
 
 const SX := 16        # footprint width  (x)  — RTS-scale map
 const SZ := 16        # footprint depth  (z)
@@ -66,6 +66,7 @@ func _build_materials() -> void:
 	_mats[Mat.LADDER] = _make_mat(Color(0.78, 0.62, 0.38))
 	_mats[Mat.BRIDGE] = _make_mat(Color(0.62, 0.45, 0.28))
 	_mats[Mat.BALLISTA] = _make_mat(Color(0.38, 0.30, 0.24))
+	_mats[Mat.BUILDING] = _make_mat(Color(0.72, 0.62, 0.45))
 
 func _make_mat(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -230,7 +231,7 @@ func is_solid(p: Vector3i) -> bool:
 	var m: int = material_at(p)
 	return m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC \
 			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE or m == Mat.BRIDGE \
-			or m == Mat.BALLISTA
+			or m == Mat.BALLISTA or m == Mat.BUILDING
 
 func is_air(p: Vector3i) -> bool:
 	return in_bounds(p) and material_at(p) == Mat.AIR
@@ -279,7 +280,8 @@ func dig_cell(p: Vector3i) -> int:
 	var m: int = material_at(p)
 	if m == Mat.EARTH or m == Mat.GOLD or m == Mat.CRYSTAL or m == Mat.RELIC \
 			or m == Mat.OIL or m == Mat.STONE or m == Mat.TREE \
-			or m == Mat.LADDER or m == Mat.BRIDGE or m == Mat.BALLISTA:
+			or m == Mat.LADDER or m == Mat.BRIDGE or m == Mat.BALLISTA \
+			or m == Mat.BUILDING:
 		set_material(p, Mat.AIR)
 	return m
 

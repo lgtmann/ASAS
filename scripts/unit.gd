@@ -38,6 +38,7 @@ var strength: bool = false              # +1 to dig depth / swing dmg / throw dm
 var endurance: bool = false              # 2 actions per turn (turn-budget stub)
 var dual_wield: bool = false             # can carry a second spade (slot stub)
 var hand_eye: bool = false               # can catch thrown spades from teammates (stub)
+var has_fishing_pole: bool = false       # can Fish food cards out of adjacent water
 
 func is_alive() -> bool:
 	return hp > 0

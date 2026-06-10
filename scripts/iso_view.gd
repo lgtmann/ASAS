@@ -197,6 +197,7 @@ func _ready() -> void:
 	_mat_colors[VoxelWorld.Mat.LADDER] = Color(0.78, 0.62, 0.38)
 	_mat_colors[VoxelWorld.Mat.BRIDGE] = Color(0.62, 0.45, 0.28)
 	_mat_colors[VoxelWorld.Mat.BALLISTA] = Color(0.38, 0.30, 0.24)
+	_mat_colors[VoxelWorld.Mat.BUILDING] = Color(0.72, 0.62, 0.45)
 
 	gs = GameState.new()
 	gs.setup(world)
@@ -373,7 +374,8 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	# Trees and player-built structures are surface features — always visible
 	# (no fog grey) and never faded.
 	if mat == VoxelWorld.Mat.TREE or mat == VoxelWorld.Mat.LADDER \
-			or mat == VoxelWorld.Mat.BRIDGE or mat == VoxelWorld.Mat.BALLISTA:
+			or mat == VoxelWorld.Mat.BRIDGE or mat == VoxelWorld.Mat.BALLISTA \
+			or mat == VoxelWorld.Mat.BUILDING:
 		seen_it = true
 		alpha = 1.0
 	# Solid path. The vast majority of cells are uniform-colour materials with a
@@ -386,11 +388,26 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var shadowed: bool = _is_shadowed(c)
 	if pattern == FULL_PATTERN and mat != VoxelWorld.Mat.TREE:
 		_draw_big_cube(c, mat, seen_it, alpha, shake, shadowed)
+		if mat == VoxelWorld.Mat.BUILDING:
+			_draw_building_label(c, shake)
 		return
 	for sub: Vector3i in _sub_draw_order:
 		if not _sub_filled(pattern, sub.x, sub.y, sub.z):
 			continue
 		_draw_sub_cube(c, sub.x, sub.y, sub.z, alpha, pattern, mat, seen_it, shake, shadowed)
+
+# Two-letter tag on a building cube's top face so kinds are tellable apart.
+func _draw_building_label(c: Vector3i, shake: Vector2) -> void:
+	var b: Dictionary = gs.buildings.get(c, {})
+	if b.is_empty():
+		return
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var kind: String = String(b["kind"])
+	var top: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y + 1), float(c.z) + 0.5) + shake
+	_draw_canvas.draw_string(font, top + Vector2(-8, 4), kind.substr(0, 2).to_upper(),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.15, 0.10, 0.05))
 
 # Fast path for uniform full cells — one cube, three polygons. Visually
 # identical to the sub-cube path when the pattern is fully filled and the
@@ -589,6 +606,7 @@ func _draw_unit(u, alpha: float) -> void:
 			"wolf": col = col.lerp(Color(0.55, 0.55, 0.58), 0.65)
 			"wizard": col = col.lerp(Color(0.62, 0.25, 0.85), 0.7)
 			"king": col = col.lerp(Color(0.95, 0.75, 0.10), 0.7)
+			"boat": col = col.lerp(Color(0.40, 0.30, 0.20), 0.5)
 	if u == gs.selected:
 		col = col.lightened(0.25)
 	col.a = alpha
@@ -640,7 +658,7 @@ func _draw_unit(u, alpha: float) -> void:
 	if font != null:
 		draw_string(font, body_top - Vector2(8, 6), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 		# Kind initial for special units (W / R / P) on the body.
-		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king"]:
+		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king", "boat"]:
 			draw_string(font, feet + Vector2(-4, -body_h * 0.45),
 				u.kind.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		var badge_pos: Vector2 = feet + Vector2(-14, -body_h - 24)
@@ -1328,6 +1346,8 @@ func _bp_cost_label(bp: Dictionary) -> String:
 		parts.append("%do" % int(bp["oil"]))
 	if int(bp.get("earth", 0)) > 0:
 		parts.append("%de" % int(bp.get("earth", 0)))
+	if int(bp.get("stone", 0)) > 0:
+		parts.append("%ds" % int(bp.get("stone", 0)))
 	return " ".join(parts)
 
 func _pile_panel(pos: Vector2) -> Panel:
@@ -1442,10 +1462,11 @@ func _refresh_info() -> void:
 		var held := "spade" if u.spade != null else "no spade"
 		who = "%s  HP %d/%d  (%s)" % [u.kind, u.hp, u.max_hp, held]
 	var team_label := "PLAYER" if gs.active_team == GameState.TEAM_PLAYER else "ENEMY"
-	info_label.text = "Turn %d   %s   Energy %d/%d   Wood %d   Earth %d   Oil %d   Selected: %s   [mode: %s]" % \
+	info_label.text = "Turn %d   %s   Energy %d/%d   Wood %d   Earth %d   Stone %d   Oil %d   Selected: %s   [mode: %s]" % \
 		[gs.turn, team_label, gs.energy, GameState.MAX_ENERGY,
 			int(gs.wood[GameState.TEAM_PLAYER]),
 			int(gs.earth[GameState.TEAM_PLAYER]),
+			int(gs.stone[GameState.TEAM_PLAYER]),
 			int(gs.oil[GameState.TEAM_PLAYER]),
 			who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
@@ -1512,6 +1533,9 @@ func _refresh_context() -> void:
 		x = _ctx_button("Swing", x, y, func(): _set_mode("swing"), spade_locked)
 		x = _ctx_button("Throw", x, y, func(): _set_mode("throw"), spade_locked)
 		x = _ctx_button("Pick Up", x, y, func(): gs.pickup(gs.selected), no_action)
+		var cant_fish: bool = no_action or not u.has_fishing_pole \
+				or not gs._adjacent_to_water(u.grid)
+		x = _ctx_button("Fish", x, y, func(): gs.fish(gs.selected), cant_fish)
 		x = _ctx_button("Special", x, y, func(): gs.special(gs.selected), spade_locked or not has_special)
 
 # Play the rise → merge → ball-arc animation, then commit the combo to state.
