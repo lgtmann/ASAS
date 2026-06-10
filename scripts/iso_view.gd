@@ -95,6 +95,20 @@ const FOG_COLOR := Color(0.66, 0.66, 0.70)   # unseen cube color
 const WIRE_ALPHA := 0.55                # outline strength for above-focal cubes
 const WIRE_WIDTH := 1.4                 # outline thickness for wireframe cubes
 
+# --- Lighting ----------------------------------------------------------------
+# Cheap voxel sun: rays come from up-back-left, so a cell is in shadow when any
+# solid cell sits along the ray above it. Shadowed cells render darker. Costs a
+# few dictionary lookups per cell, only on (cached) terrain redraws.
+const SHADOW_RAY := Vector3i(-1, 1, -1)
+const SHADOW_REACH := 4               # how many cells of height cast shadow
+const SHADOW_DARKEN := 0.24
+
+func _is_shadowed(c: Vector3i) -> bool:
+	for k in range(1, SHADOW_REACH):
+		if world.cells.has(c + SHADOW_RAY * k):
+			return true
+	return false
+
 # --- Sub-cube rendering ------------------------------------------------------
 # Each logical cell renders as a 3x3x4 grid of 36 sub-cubes. Game logic stays
 # per-cell; this is a pure visual subdivision so cells can carry richer
@@ -368,19 +382,20 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	# through to the sub-cube path for their richer geometry.
 	var shake := Vector2(0, _quake_offset(c))
 	var pattern: int = _cell_pattern(c, mat)
+	var shadowed: bool = _is_shadowed(c)
 	if pattern == FULL_PATTERN and mat != VoxelWorld.Mat.TREE:
-		_draw_big_cube(c, mat, seen_it, alpha, shake)
+		_draw_big_cube(c, mat, seen_it, alpha, shake, shadowed)
 		return
 	for sub: Vector3i in _sub_draw_order:
 		if not _sub_filled(pattern, sub.x, sub.y, sub.z):
 			continue
-		_draw_sub_cube(c, sub.x, sub.y, sub.z, alpha, pattern, mat, seen_it, shake)
+		_draw_sub_cube(c, sub.x, sub.y, sub.z, alpha, pattern, mat, seen_it, shake, shadowed)
 
 # Fast path for uniform full cells — one cube, three polygons. Visually
 # identical to the sub-cube path when the pattern is fully filled and the
 # material has a single colour, since face culling within the sub-cube path
 # would have produced the same outer surface anyway.
-func _draw_big_cube(c: Vector3i, mat: int, seen: bool, alpha: float, shake: Vector2) -> void:
+func _draw_big_cube(c: Vector3i, mat: int, seen: bool, alpha: float, shake: Vector2, shadowed: bool = false) -> void:
 	var p010 := iso(c + Vector3i(0, 1, 0)) + shake
 	var p110 := iso(c + Vector3i(1, 1, 0)) + shake
 	var p111 := iso(c + Vector3i(1, 1, 1)) + shake
@@ -390,6 +405,8 @@ func _draw_big_cube(c: Vector3i, mat: int, seen: bool, alpha: float, shake: Vect
 	var p001 := iso(c + Vector3i(0, 0, 1)) + shake
 	var base_col: Color = (FOG_COLOR if not seen
 			else _mat_colors.get(mat, Color(0.5, 0.5, 0.5)))
+	if shadowed:
+		base_col = base_col.darkened(SHADOW_DARKEN)
 	var top_col := base_col
 	top_col.a = alpha
 	var right_col := top_col.darkened(0.22)
@@ -516,7 +533,7 @@ func _sub_base_color(c: Vector3i, mat: int, sx: int, sy: int, sz: int, seen: boo
 	return _mat_colors.get(mat, Color(0.5, 0.5, 0.5))
 
 func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
-		pattern: int, mat: int, seen: bool, shake: Vector2) -> void:
+		pattern: int, mat: int, seen: bool, shake: Vector2, shadowed: bool = false) -> void:
 	var p010 := _sub_iso(c, sx, sy, sz, 0, 1, 0) + shake
 	var p110 := _sub_iso(c, sx, sy, sz, 1, 1, 0) + shake
 	var p111 := _sub_iso(c, sx, sy, sz, 1, 1, 1) + shake
@@ -525,6 +542,8 @@ func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
 	var p101 := _sub_iso(c, sx, sy, sz, 1, 0, 1) + shake
 	var p001 := _sub_iso(c, sx, sy, sz, 0, 0, 1) + shake
 	var base_col: Color = _sub_base_color(c, mat, sx, sy, sz, seen)
+	if shadowed:
+		base_col = base_col.darkened(SHADOW_DARKEN)
 	var top_col := base_col
 	top_col.a = alpha
 	var right_col := top_col.darkened(0.22)

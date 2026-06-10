@@ -882,19 +882,26 @@ func move_targets(u) -> Array:
 	return out
 
 func dig_targets(u) -> Array:
-	# Dig works on dirt-like solids (EARTH/GOLD/CRYSTAL/RELIC/OIL). Trees and
-	# boulders are obstacles — chop those with Swing, not Dig (no dirt to move).
+	# Dig works on dirt-like solids (EARTH/GOLD/CRYSTAL/RELIC/OIL) anywhere in
+	# the full 26-cell adjacent neighbourhood — so you can excavate diagonals
+	# and below-diagonals without tunnelling straight down under your own feet.
+	# Only digging the cell DIRECTLY below still descends you (tunneling).
+	# Trees and boulders are obstacles — chop those with Swing, not Dig.
 	if u == null or u.spade == null or u.acted:
 		return []
 	var out := []
-	for d in CARDINAL_6:
-		var p: Vector3i = u.grid + d
-		if not world.is_solid(p):
-			continue
-		var m: int = world.material_at(p)
-		if m == VoxelWorld.Mat.TREE or m == VoxelWorld.Mat.STONE:
-			continue
-		out.append(p)
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			for dz in range(-1, 2):
+				if dx == 0 and dy == 0 and dz == 0:
+					continue
+				var p: Vector3i = u.grid + Vector3i(dx, dy, dz)
+				if not world.is_solid(p):
+					continue
+				var m: int = world.material_at(p)
+				if m == VoxelWorld.Mat.TREE or m == VoxelWorld.Mat.STONE:
+					continue
+				out.append(p)
 	return out
 
 # Cells the selected unit can harvest with a single click (no mode button):
