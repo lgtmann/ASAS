@@ -76,6 +76,10 @@ var _next_card_instance: int = 0   # monotonic id so identical-content cards don
 # Fog of war: every cell ever revealed by a friendly unit's line-of-sight.
 # Unseen solid cells render as light grey (you see shape, not material).
 var seen: Dictionary = {}
+# Cache key for the last vision recompute (terrain version + friendly unit
+# positions). Recompute is the CPU hot path — skip it when nothing relevant
+# moved or changed.
+var _vision_key: String = ""
 
 # Turn-team tracking and a flag so iso_view can auto-play BOTH sides
 # (visible combat simulation).
@@ -232,6 +236,15 @@ func apply_gravity() -> void:
 func recompute_vision() -> void:
 	if world == null:
 		return
+	# Skip the (expensive) Bresenham sweep when neither the terrain nor any
+	# friendly unit position has changed since the last recompute.
+	var key: String = str(world.version)
+	for u in units:
+		if u.team == 0 and u.is_alive():
+			key += "|%d,%d,%d" % [u.grid.x, u.grid.y, u.grid.z]
+	if key == _vision_key:
+		return
+	_vision_key = key
 	for u in units:
 		if u.team != 0 or not u.is_alive():
 			continue
@@ -240,7 +253,7 @@ func recompute_vision() -> void:
 func _reveal_from(u) -> void:
 	# A friendly unit reveals every cell on its own y-plane reachable by an
 	# unobstructed 2D ray (Bresenham), plus the cube directly below each
-	# revealed air cell (the visible floor).
+	# revealed air cell (the visible floor — solid earth OR water in a trench).
 	var y: int = u.grid.y
 	for tx in world.SX:
 		for tz in world.SZ:
@@ -249,7 +262,7 @@ func _reveal_from(u) -> void:
 			var here := Vector3i(tx, y, tz)
 			seen[here] = true
 			var below := Vector3i(tx, y - 1, tz)
-			if world.is_solid(below):
+			if world.material_at(below) != VoxelWorld.Mat.AIR:
 				seen[below] = true
 
 # Returns true iff the 2D segment from (sx,sz) to (tx,tz) at y has no solid

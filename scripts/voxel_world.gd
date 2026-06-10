@@ -9,6 +9,10 @@ extends Node3D
 # uses this to know when it needs to re-render.
 signal cells_changed
 
+# Monotonic terrain version — bumps on every set_material. Cheap change-key
+# for caches (vision recompute skips when version + unit positions match).
+var version: int = 0
+
 enum Mat { AIR, EARTH, WATER, GOLD, CRYSTAL, RELIC, OIL, STONE, TREE }
 
 const SX := 16        # footprint width  (x)  — RTS-scale map
@@ -278,6 +282,7 @@ func set_material(p: Vector3i, m: int) -> void:
 		cells.erase(p)
 	else:
 		cells[p] = m
+	version += 1
 	_refresh_cube(p)
 	cells_changed.emit()
 

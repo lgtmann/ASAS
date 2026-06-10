@@ -141,6 +141,14 @@ var terrain_layer: TerrainLayer
 # canvas should receive them — `terrain_layer` from terrain redraws, `self`
 # from dynamic redraws. Polygon helpers in _draw_cube etc. read this.
 var _draw_canvas: CanvasItem = null
+# Sorted cell-key cache for the terrain pass (sorting ~1500 keys with a
+# GDScript comparator every redraw is expensive). Rebuilt when cells change.
+var _terrain_keys: Array = []
+var _terrain_keys_dirty: bool = true
+# Trackers so _on_changed only invalidates the terrain cache when something
+# terrain-visible actually changed (vision growth or focal-level change).
+var _last_seen_size: int = -1
+var _last_tl_view_level: int = -999
 
 # Earthquake animation: when gs emits quake_started, every solid cube whose
 # (x, z) column is in this dict bounces with a random phase, amplitude decaying
@@ -182,7 +190,7 @@ func _ready() -> void:
 	terrain_layer.view = self
 	terrain_layer.z_index = -1
 	add_child(terrain_layer)
-	world.cells_changed.connect(terrain_layer.queue_redraw)
+	world.cells_changed.connect(_on_cells_changed)
 
 	_build_hud()
 	gs.start()
@@ -272,38 +280,48 @@ func _draw_flow_arrows() -> void:
 		draw_polyline(PackedVector2Array([tip, b1, b2, tip]), outline_col, 1.0)
 
 func _level_alpha(y: int) -> float:
-	# Alpha for cubes AT or NEAR (one level above) the focal level. Cubes more
-	# than one level above wireframe instead (see _draw_cube).
+	# Alpha for solid-rendered cubes. Above-focal cubes only reach here when
+	# the focal level is at/above ground (underground views wireframe them in
+	# _draw_cube) — render those at the near-above fade so tall trees and
+	# boulders stay fully visible on the surface view.
 	if y == view_level:
 		return 1.0
-	if y == view_level + 1:
+	if y > view_level:
 		return FADE_NEAR_ABOVE
-	if y < view_level:
-		return FADE_BELOW
-	return 0.0   # never used; far-above cubes early-out into the wireframe path
+	return FADE_BELOW
+
+func _on_cells_changed() -> void:
+	_terrain_keys_dirty = true
+	if terrain_layer != null:
+		terrain_layer.queue_redraw()
 
 # Cache layer's draw — only fires when we explicitly mark it dirty (vision /
-# terrain / view-level / quake). Sorts the cell keys back-to-front and draws
-# each cube; `_draw_canvas` routes the primitives to the layer.
+# terrain / view-level / quake). Uses a cached back-to-front key sort that's
+# only rebuilt when cells actually changed; `_draw_canvas` routes the
+# primitives to the layer.
 func _draw_terrain_layer(canvas: CanvasItem) -> void:
 	if world == null or gs == null:
 		return
 	_draw_canvas = canvas
-	var keys: Array = world.cells.keys()
-	keys.sort_custom(func(a, b):
-		if a.x + a.z != b.x + b.z:
-			return a.x + a.z < b.x + b.z
-		return a.y < b.y)
-	for c in keys:
+	if _terrain_keys_dirty:
+		_terrain_keys = world.cells.keys()
+		_terrain_keys.sort_custom(func(a, b):
+			if a.x + a.z != b.x + b.z:
+				return a.x + a.z < b.x + b.z
+			return a.y < b.y)
+		_terrain_keys_dirty = false
+	for c in _terrain_keys:
 		_draw_cube(c, _level_alpha(c.y))
 	_draw_canvas = self
 
 func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var seen_it: bool = gs.seen.has(c)
 	var mat: int = world.material_at(c)
-	# Cubes >1 level above the focal layer wireframe (single cube outline so
-	# the see-through cage doesn't get visually noisy).
-	if c.y > view_level + 1:
+	# Cubes >1 level above the focal layer wireframe — but ONLY when the focal
+	# level is underground. At/above ground level nothing overhead is hiding
+	# anything, so surface protrusions (tall trees, boulders) render solid in
+	# full instead of getting their tops trimmed to wireframe.
+	if c.y > view_level + 1 and view_level < VoxelWorld.GROUND:
 		var base_col: Color = (FOG_COLOR if not seen_it
 				else _mat_colors.get(mat, Color(0.5, 0.5, 0.5)))
 		var wire_col := Color(base_col.r, base_col.g, base_col.b, WIRE_ALPHA)
@@ -884,10 +902,14 @@ func _on_changed() -> void:
 	_refresh_info()
 	_refresh_combo_status()
 	queue_redraw()
-	# Vision can have changed (recompute_vision fires on every action), so the
-	# terrain cache must redraw too — fog colours may be lifting.
+	# Terrain cache only needs a redraw when something terrain-visible changed:
+	# fog lifted (seen grew) or the focal level moved. Plain selection / card
+	# clicks reuse the cached render.
 	if terrain_layer != null:
-		terrain_layer.queue_redraw()
+		if gs.seen.size() != _last_seen_size or view_level != _last_tl_view_level:
+			_last_seen_size = gs.seen.size()
+			_last_tl_view_level = view_level
+			terrain_layer.queue_redraw()
 
 func _refresh_combo_status() -> void:
 	if status_label == null:
