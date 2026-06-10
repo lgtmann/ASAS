@@ -133,13 +133,19 @@ var last_area_wizard: bool = false
 
 # Spawn the enemy force for the current `area` in the far corner. Area 1 is a
 # plain leader + 2 operators; later areas mix in wolves and barbarians
-# (warrior / javelin kinds), and EVEN areas are led by a summoning wizard.
+# (warrior / javelin kinds). EVEN areas are led by a summoning wizard, and
+# every 3rd area is a BOSS — the first boss is the King of the Hill (takes
+# precedence over the wizard). Bosses and minibosses grant magic rewards.
 func _spawn_enemy_force() -> void:
-	var is_boss: bool = (area % 2 == 0)
-	last_area_wizard = is_boss
+	var is_king: bool = (area % 3 == 0)
+	var is_wizard: bool = (area % 2 == 0) and not is_king
+	last_area_wizard = is_wizard or is_king
+	if is_king:
+		_spawn_king_force()
+		return
 	var el = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
-	el.kind = "wizard" if is_boss else "leader"
-	el.hp = 6 + 2 * area + (2 if is_boss else 0)
+	el.kind = "wizard" if is_wizard else "leader"
+	el.hp = 6 + 2 * area + (2 if is_wizard else 0)
 	el.max_hp = el.hp
 	var kinds := ["operator", "wolf", "warrior", "javelin"]
 	for i in (1 + area):
@@ -154,6 +160,28 @@ func _spawn_enemy_force() -> void:
 		elif kind == "javelin" and m.spade != null:
 			# Barbarian javelin throwers keep their spade between throws.
 			m.spade.handle = "spade_boomerang"
+
+# King of the Hill: a tower-building boss guarded by javelin throwers and
+# crewed ballistas. Approach and the ranged screen shreds you; hang back and
+# his hill grows ever higher.
+func _spawn_king_force() -> void:
+	var king = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
+	king.kind = "king"
+	king.hp = 10 + 3 * area
+	king.max_hp = king.hp
+	# Javelin screen.
+	for i in (2 + area / 3):
+		var jt = _spawn_unit(TEAM_ENEMY, _free_spot_near(3, 3), true)
+		jt.kind = "javelin"
+		if jt.spade != null:
+			jt.spade.handle = "spade_boomerang"
+	# Two crewed ballistas flanking the hill.
+	for i in 2:
+		var bspot: Vector3i = _free_spot_near(2 + i * 3, 4)
+		world.set_material(bspot, VoxelWorld.Mat.BALLISTA)
+		ballistas.append({"grid": bspot, "team": TEAM_ENEMY})
+		var gunner = _spawn_unit(TEAM_ENEMY, _free_spot_near(bspot.x, bspot.z), true)
+		gunner.kind = "operator"
 
 # Wrap `changed.emit()` so gravity + vision stay in sync without sprinkling
 # refreshes through every action.
@@ -221,6 +249,19 @@ func ai_step(team: int) -> bool:
 		if target == null:
 			continue
 		var dist: int = _cheb3(u.grid, target.grid)
+		# King of the Hill boss: every turn he piles earth beneath himself and
+		# rides it upward — a living tower defended by javelins + ballistas.
+		if u.kind == "king":
+			if not u.acted and u.grid.y + 1 < world.SY:
+				var stand: Vector3i = u.grid
+				u.grid = stand + Vector3i(0, 1, 0)
+				u.draw_pos = Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
+				world.set_material(stand, VoxelWorld.Mat.EARTH)
+				u.acted = true
+				notice.emit("The King builds his hill higher!")
+				_emit_changed()
+				return true
+			continue                          # the King never leaves his hill
 		# Wizard miniboss: summon a wolf instead of fighting (capped force).
 		if u.kind == "wizard":
 			if not u.acted and team_alive_count(team) < 9:
@@ -251,6 +292,8 @@ func ai_step(team: int) -> bool:
 			continue
 		if u.spade == null and u.kind != "wolf":
 			continue                          # spadeless humanoids hold position
+		if _adjacent_own_ballista(u):
+			continue                          # gunners hold their post
 		var moves: Array = move_targets(u)
 		if moves.is_empty():
 			continue
@@ -263,6 +306,12 @@ func ai_step(team: int) -> bool:
 				best = m
 		if best != u.grid:
 			move_to(u, best)
+			return true
+	return false
+
+func _adjacent_own_ballista(u) -> bool:
+	for b in ballistas:
+		if int(b["team"]) == u.team and _cheb3(u.grid, b["grid"]) == 1:
 			return true
 	return false
 
@@ -417,7 +466,7 @@ const BLUEPRINTS := [
 const STRUCTURES := {
 	"ladder": {"title": "Ladder", "cost": 1, "blurb": "climb walls"},
 	"bridge": {"title": "Bridge", "cost": 1, "blurb": "cross water"},
-	"ballista": {"title": "Ballista", "cost": 1, "blurb": "auto-fires r3, 2 dmg"},
+	"ballista": {"title": "Ballista", "cost": 1, "blurb": "manned: fires r3, 2 dmg"},
 	"dirt_wall": {"title": "Dirt Wall", "cost": 1, "blurb": "raise an earth block"},
 }
 
@@ -837,8 +886,17 @@ func play_ritual_at(card, cell: Vector3i) -> bool:
 
 # ---------------------------------------------------------------- ballistas
 
-# Fire every ballista belonging to `team`: nearest enemy within Chebyshev 3
-# takes 2 damage. Called at end of that team's turn.
+# A ballista is manned when a same-team unit stands within Chebyshev 1 of it
+# (beside it or on top). Manning is passive — it costs no action.
+func is_ballista_manned(b: Dictionary) -> bool:
+	var g: Vector3i = b["grid"]
+	for u in units:
+		if u.is_alive() and u.team == int(b["team"]) and _cheb3(u.grid, g) == 1:
+			return true
+	return false
+
+# Fire every MANNED ballista belonging to `team`: nearest enemy within
+# Chebyshev 3 takes 2 damage. Called at end of that team's turn.
 func _fire_ballistas(team: int) -> void:
 	for b in ballistas.duplicate():
 		var g: Vector3i = b["grid"]
@@ -847,6 +905,8 @@ func _fire_ballistas(team: int) -> void:
 			continue
 		if int(b["team"]) != team:
 			continue
+		if not is_ballista_manned(b):
+			continue              # no crew, no shot
 		var best = null
 		var best_d: int = 99
 		for u in units:

@@ -588,6 +588,7 @@ func _draw_unit(u, alpha: float) -> void:
 			"plow": col = col.lerp(Color(0.55, 0.45, 0.28), 0.6)
 			"wolf": col = col.lerp(Color(0.55, 0.55, 0.58), 0.65)
 			"wizard": col = col.lerp(Color(0.62, 0.25, 0.85), 0.7)
+			"king": col = col.lerp(Color(0.95, 0.75, 0.10), 0.7)
 	if u == gs.selected:
 		col = col.lightened(0.25)
 	col.a = alpha
@@ -639,7 +640,7 @@ func _draw_unit(u, alpha: float) -> void:
 	if font != null:
 		draw_string(font, body_top - Vector2(8, 6), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 		# Kind initial for special units (W / R / P) on the body.
-		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard"]:
+		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king"]:
 			draw_string(font, feet + Vector2(-4, -body_h * 0.45),
 				u.kind.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		var badge_pos: Vector2 = feet + Vector2(-14, -body_h - 24)
