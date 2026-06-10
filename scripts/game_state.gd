@@ -94,6 +94,26 @@ var is_over: bool = false
 var area: int = 1
 var _area_clear_emitted: bool = false
 
+# Overworld: after the intro area you pick a governor's domain. Each branch is
+# an intro area (wizard miniboss) then the governor boss. Beat both governors
+# to unlock Flud, their guru.
+var branch: String = ""                 # "", "hills", "riverlands", "flud"
+var stage_in_branch: int = 0            # 0 = intro/none, 1 = branch intro, 2 = boss
+var bosses_defeated: Dictionary = {"hills": false, "riverlands": false}
+
+# Where can the player expand right now?
+func expansion_options() -> Array:
+	if stage_in_branch == 1 and branch != "":
+		return [branch]                  # mid-branch: the boss is next, no detours
+	var opts: Array = []
+	if not bool(bosses_defeated["hills"]):
+		opts.append("hills")
+	if not bool(bosses_defeated["riverlands"]):
+		opts.append("riverlands")
+	if opts.is_empty():
+		opts.append("flud")
+	return opts
+
 # Stockpiled strategic resources (per team). Oil unlocks advanced cards later.
 # Energy is still per-turn — these are persistent banks that fill over time.
 var oil: Array = [0, 0]   # oil[team] = barrels in the bank
@@ -133,39 +153,115 @@ func start() -> void:
 	recompute_vision()
 	begin_turn()
 
-# Whether the area being played has a wizard miniboss (even-numbered areas).
-# Read at area-clear time to decide between unit and magic rewards.
+# Whether the area just played grants MAGIC rewards (miniboss / governor /
+# guru areas). Read at area-clear time by the reward modal.
 var last_area_wizard: bool = false
 
-# Spawn the enemy force for the current `area` in the far corner. Area 1 is a
-# plain leader + 2 operators; later areas mix in wolves and barbarians
-# (warrior / javelin kinds). EVEN areas are led by a summoning wizard, and
-# every 3rd area is a BOSS — the first boss is the King of the Hill (takes
-# precedence over the wizard). Bosses and minibosses grant magic rewards.
+# Spawn the enemy force for the current campaign position. Intro area is a
+# plain leader + 2 operators; branch intro areas are wizard minibosses with a
+# mixed force; branch boss areas spawn the governor (King / Otter); Flud is
+# the (stubbed) finale. Minibosses + bosses grant magic rewards.
 func _spawn_enemy_force() -> void:
-	var is_king: bool = (area % 3 == 0)
-	var is_wizard: bool = (area % 2 == 0) and not is_king
-	last_area_wizard = is_wizard or is_king
-	if is_king:
-		_spawn_king_force()
+	last_area_wizard = false
+	if branch == "flud" and stage_in_branch == 2:
+		last_area_wizard = true
+		_spawn_flud_force()
 		return
+	if stage_in_branch == 2:
+		last_area_wizard = true
+		if branch == "hills":
+			_spawn_king_force()
+		else:
+			_spawn_otter_force()
+		return
+	if stage_in_branch == 1:
+		last_area_wizard = true
+		_apply_branch_flavour()
+		var wiz = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
+		wiz.kind = "wizard"
+		wiz.hp = 8 + 2 * area
+		wiz.max_hp = wiz.hp
+		var kinds := ["wolf", "warrior", "javelin", "operator"]
+		for i in (1 + area):
+			var kind: String = kinds[i % kinds.size()]
+			var m = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), kind != "wolf")
+			m.kind = kind
+			if kind == "wolf":
+				m.hp = 4
+				m.max_hp = 4
+			elif kind == "javelin" and m.spade != null:
+				m.spade.handle = "spade_boomerang"
+		return
+	# Intro area (area 1).
 	var el = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
-	el.kind = "wizard" if is_wizard else "leader"
-	el.hp = 6 + 2 * area + (2 if is_wizard else 0)
+	el.kind = "leader"
+	el.hp = 8
 	el.max_hp = el.hp
-	var kinds := ["operator", "wolf", "warrior", "javelin"]
-	for i in (1 + area):
-		var kind: String = "operator"
-		if area >= 2:
-			kind = kinds[i % kinds.size()]
-		var m = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), kind != "wolf")
-		m.kind = kind
-		if kind == "wolf":
+	_spawn_unit(TEAM_ENEMY, _free_spot_near(3, 2), true)
+	_spawn_unit(TEAM_ENEMY, _free_spot_near(2, 3), true)
+
+# Branch terrain flavour: the hills get extra boulders + raised mounds; the
+# riverlands get a second river.
+func _apply_branch_flavour() -> void:
+	if branch == "hills":
+		for i in 10:
+			var x: int = randi() % world.SX
+			var z: int = randi() % world.SZ
+			if world._is_safe_zone(x, z):
+				continue
+			var top: Vector3i = world.surface_cell(x, z)
+			if world.is_air(top) and unit_at(top) == null:
+				world.set_material(top, VoxelWorld.Mat.EARTH if (i % 2 == 0) else VoxelWorld.Mat.STONE)
+	elif branch == "riverlands":
+		world.add_river()
+
+# The Otter — governor of the riverlands. Stands by the water; alternates
+# between launching boat-riders and bending the river toward you.
+func _spawn_otter_force() -> void:
+	# Find the river reach nearest the enemy corner.
+	var best_w := Vector3i(2, world.GROUND, 2)
+	var best_s: int = 99999
+	for w_v in world.water_flow.keys():
+		var w: Vector3i = w_v
+		if w.x + w.z < best_s:
+			best_s = w.x + w.z
+			best_w = w
+	var otter = _spawn_unit(TEAM_ENEMY, _free_spot_near(best_w.x, best_w.z), false)
+	otter.kind = "otter"
+	otter.hp = 12 + 2 * area
+	otter.max_hp = otter.hp
+	for i in 2:
+		var jt = _spawn_unit(TEAM_ENEMY, _free_spot_near(3, 3), true)
+		jt.kind = "javelin"
+		if jt.spade != null:
+			jt.spade.handle = "spade_boomerang"
+	# Two boat-riders already patrolling the river.
+	var placed: int = 0
+	for w_v in world.water_flow.keys():
+		if placed >= 2:
+			break
+		var w: Vector3i = w_v
+		if unit_at(w) == null:
+			var b = _spawn_unit(TEAM_ENEMY, w, false)
+			b.kind = "boat"
+			b.hp = 4
+			b.max_hp = 4
+			placed += 1
+
+# Flud, the guru — full battle comes later. For now: a brutal mixed vanguard.
+func _spawn_flud_force() -> void:
+	notice.emit("FLUD's domain — the waters rise… (full battle coming soon)")
+	world.add_river()
+	var flud = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
+	flud.kind = "wizard"
+	flud.hp = 24
+	flud.max_hp = 24
+	for i in 3:
+		var m = _spawn_unit(TEAM_ENEMY, _free_spot_near(3, 3), i > 0)
+		m.kind = ["wolf", "warrior", "javelin"][i]
+		if m.kind == "wolf":
 			m.hp = 4
 			m.max_hp = 4
-		elif kind == "javelin" and m.spade != null:
-			# Barbarian javelin throwers keep their spade between throws.
-			m.spade.handle = "spade_boomerang"
 
 # King of the Hill: a tower-building boss guarded by javelin throwers and
 # crewed ballistas. Approach and the ranged screen shreds you; hang back and
@@ -228,6 +324,9 @@ func _check_game_over() -> void:
 	# Wiping the enemy CLEARS THE AREA (campaign continues) instead of ending.
 	if team_alive_count(TEAM_ENEMY) == 0 and not _area_clear_emitted:
 		_area_clear_emitted = true
+		if stage_in_branch == 2 and bosses_defeated.has(branch):
+			bosses_defeated[branch] = true
+			notice.emit("The governor of the %s has fallen!" % branch)
 		notice.emit("Area %d cleared!" % area)
 		area_cleared.emit(area)
 
@@ -268,6 +367,26 @@ func ai_step(team: int) -> bool:
 				_emit_changed()
 				return true
 			continue                          # the King never leaves his hill
+		# The Otter: alternates launching boat-riders and bending the river.
+		if u.kind == "otter":
+			if not u.acted:
+				if (turn % 2) == 0 and team_alive_count(team) < 9:
+					for w_v in world.water_flow.keys():
+						var w: Vector3i = w_v
+						if unit_at(w) == null and _cheb3(w, u.grid) <= 6:
+							var rider = _spawn_unit(team, w, false)
+							rider.kind = "boat"
+							rider.hp = 4
+							rider.max_hp = 4
+							u.acted = true
+							notice.emit("The Otter launches a boat-rider!")
+							_emit_changed()
+							return true
+				else:
+					if _otter_extend_river(u, target):
+						u.acted = true
+						return true
+			continue                      # the Otter holds the riverbank
 		# Wizard miniboss: summon a wolf instead of fighting (capped force).
 		if u.kind == "wizard":
 			if not u.acted and team_alive_count(team) < 9:
@@ -296,7 +415,7 @@ func ai_step(team: int) -> bool:
 			return true
 		if u.moved:
 			continue
-		if u.spade == null and u.kind != "wolf":
+		if u.spade == null and u.kind != "wolf" and u.kind != "boat":
 			continue                          # spadeless humanoids hold position
 		if _adjacent_own_ballista(u):
 			continue                          # gunners hold their post
@@ -314,6 +433,42 @@ func ai_step(team: int) -> bool:
 			move_to(u, best)
 			return true
 	return false
+
+# Bend the river one cell toward the Otter's prey: pick the water cell nearest
+# the target and flood the best adjacent earth column. Units standing there
+# get dunked by gravity on the next state change.
+func _otter_extend_river(u, target) -> bool:
+	if target == null:
+		return false
+	var best_w := Vector3i(-9999, 0, 0)
+	var best_d: int = 99999
+	for w_v in world.water_flow.keys():
+		var w: Vector3i = w_v
+		var d: int = _cheb3(w, target.grid)
+		if d < best_d:
+			best_d = d
+			best_w = w
+	if best_w.x == -9999:
+		return false
+	var best_n := Vector3i(-9999, 0, 0)
+	var best_nd: int = 99999
+	for d in DIRS:
+		var n: Vector3i = best_w + d
+		if not world.in_bounds(n):
+			continue
+		if world.material_at(n) != VoxelWorld.Mat.EARTH:
+			continue
+		var nd: int = _cheb3(n, target.grid)
+		if nd < best_nd:
+			best_nd = nd
+			best_n = n
+	if best_n.x == -9999:
+		return false
+	world.set_material(best_n, VoxelWorld.Mat.WATER)
+	world.water_flow[best_n] = best_n - best_w
+	notice.emit("The Otter bends the river!")
+	_emit_changed()
+	return true
 
 func _adjacent_own_ballista(u) -> bool:
 	for b in ballistas:
@@ -667,6 +822,15 @@ func grant_special(id: String) -> void:
 # carry over to the near corner, fog resets, enemies scale with area number.
 # `direction` ("top_left" / "top_right") is recorded flavour for now.
 func advance_area(direction: String) -> void:
+	# direction: "hills" / "riverlands" / "flud".
+	if direction == branch and stage_in_branch == 1:
+		stage_in_branch = 2              # deeper in: the governor awaits
+	elif direction == "flud":
+		branch = "flud"
+		stage_in_branch = 2
+	else:
+		branch = direction
+		stage_in_branch = 1
 	area += 1
 	_area_clear_emitted = false
 	dropped.clear()
@@ -973,6 +1137,9 @@ func play_ritual_at(card, cell: Vector3i) -> bool:
 			var victim = unit_at(cell)
 			if victim == null or victim.team != TEAM_ENEMY:
 				notice.emit("No enemy there to convert.")
+				return false
+			if victim.kind in ["king", "otter", "wizard"]:
+				notice.emit("%s is too strong-willed to convert!" % victim.kind.capitalize())
 				return false
 			victim.team = TEAM_PLAYER
 			victim.converted_turns = 2

@@ -581,7 +581,7 @@ func _draw_sub_cube(c: Vector3i, sx: int, sy: int, sz: int, alpha: float,
 func _draw_highlight(c: Vector3i) -> void:
 	# Wireframe diamond on the visible surface for cell `c`. For air cells we
 	# outline the floor (top of the cube below); for solid cells, the top face.
-	var anchor: Vector3i = c if world.is_solid(c) else c + Vector3i(0, -1, 0)
+	var anchor: Vector3i = c if (world.is_solid(c) or world.is_water(c)) else c + Vector3i(0, -1, 0)
 	var poly := top_face(anchor)
 	var closed := PackedVector2Array([poly[0], poly[1], poly[2], poly[3], poly[0]])
 	var color: Color = MODE_COLORS.get(mode, Color.WHITE)
@@ -606,6 +606,7 @@ func _draw_unit(u, alpha: float) -> void:
 			"wolf": col = col.lerp(Color(0.55, 0.55, 0.58), 0.65)
 			"wizard": col = col.lerp(Color(0.62, 0.25, 0.85), 0.7)
 			"king": col = col.lerp(Color(0.95, 0.75, 0.10), 0.7)
+			"otter": col = col.lerp(Color(0.25, 0.60, 0.55), 0.7)
 			"boat": col = col.lerp(Color(0.40, 0.30, 0.20), 0.5)
 	if u == gs.selected:
 		col = col.lightened(0.25)
@@ -658,7 +659,7 @@ func _draw_unit(u, alpha: float) -> void:
 	if font != null:
 		draw_string(font, body_top - Vector2(8, 6), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 		# Kind initial for special units (W / R / P) on the body.
-		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king", "boat"]:
+		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king", "boat", "otter"]:
 			draw_string(font, feet + Vector2(-4, -body_h * 0.45),
 				u.kind.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		var badge_pos: Vector2 = feet + Vector2(-14, -body_h - 24)
@@ -969,7 +970,7 @@ func _pick_cell_in(p: Vector2, cells: Array):
 			return sa > sb
 		return a.y > b.y)
 	for c in ts:
-		var anchor: Vector3i = c if world.is_solid(c) else c + Vector3i(0, -1, 0)
+		var anchor: Vector3i = c if (world.is_solid(c) or world.is_water(c)) else c + Vector3i(0, -1, 0)
 		if Geometry2D.is_point_in_polygon(p, top_face(anchor)):
 			return c
 	return null
@@ -1279,25 +1280,31 @@ func _on_area_cleared(area_num: int) -> void:
 			panel.add_child(b)
 			y += 64.0
 
+const BRANCH_LABELS := {
+	"hills": "The Hills — domain of the King of the Hill",
+	"riverlands": "The Riverlands — domain of The Otter",
+	"flud": "FLUD's Domain — the gurus' master (finale)",
+}
+
 func _open_expand_modal() -> void:
-	var panel := _make_modal(140)
+	var options: Array = gs.expansion_options()
+	var panel := _make_modal(96 + options.size() * 64.0)
 	var title := Label.new()
-	title.text = "Expand your territory:"
+	title.text = "March onward:" if options.size() == 1 else "Choose your path:"
 	title.add_theme_font_size_override("font_size", 17)
 	title.position = Vector2(20, 14)
 	panel.add_child(title)
-	var tl := Button.new()
-	tl.text = "Top-Left"
-	tl.position = Vector2(40, 60)
-	tl.size = Vector2(180, 56)
-	tl.pressed.connect(func(): _advance_area("top_left"))
-	panel.add_child(tl)
-	var tr := Button.new()
-	tr.text = "Top-Right"
-	tr.position = Vector2(260, 60)
-	tr.size = Vector2(180, 56)
-	tr.pressed.connect(func(): _advance_area("top_right"))
-	panel.add_child(tr)
+	var y := 52.0
+	for opt_v in options:
+		var opt: String = String(opt_v)
+		var b := Button.new()
+		b.text = String(BRANCH_LABELS.get(opt, opt))
+		b.position = Vector2(20, y)
+		b.size = Vector2(440, 56)
+		var choice: String = opt
+		b.pressed.connect(func(): _advance_area(choice))
+		panel.add_child(b)
+		y += 64.0
 
 func _advance_area(direction: String) -> void:
 	_close_modal()

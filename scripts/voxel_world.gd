@@ -166,9 +166,10 @@ func _generate_river() -> void:
 		if not in_bounds(cur):
 			break
 
-# Walk the river from every source, dropping any water cell that the flow
-# graph can no longer reach. Call after any terrain change that touches water
-# (a dam, a diversion). Returns the dropped cells so the caller can notice.
+# Connectivity check: water lives while it's flood-fill connected (cardinal
+# adjacency) to an eternal source. Sources never run out, diverted branches
+# stay wet, and a dam that cuts the channel dries everything beyond it —
+# leaving the empty trench one level below the surface.
 func recompute_water_flow() -> Array:
 	var live: Dictionary = {}
 	var queue: Array = []
@@ -176,15 +177,15 @@ func recompute_water_flow() -> Array:
 		if is_water(s):
 			live[s] = true
 			queue.append(s)
+	var dirs := [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1),
+			Vector3i(0, 0, -1), Vector3i(0, 1, 0), Vector3i(0, -1, 0)]
 	while not queue.is_empty():
 		var cur: Vector3i = queue.pop_front()
-		var flow: Vector3i = water_flow.get(cur, Vector3i.ZERO)
-		if flow == Vector3i.ZERO:
-			continue
-		var nxt: Vector3i = cur + flow
-		if is_water(nxt) and not live.has(nxt):
-			live[nxt] = true
-			queue.append(nxt)
+		for d in dirs:
+			var nxt: Vector3i = cur + d
+			if is_water(nxt) and not live.has(nxt):
+				live[nxt] = true
+				queue.append(nxt)
 	var dropped: Array = []
 	for cell_v in water_flow.keys():
 		var cell: Vector3i = cell_v
@@ -193,6 +194,33 @@ func recompute_water_flow() -> Array:
 			water_flow.erase(cell)
 			dropped.append(cell)
 	return dropped
+
+# Carve an ADDITIONAL river (used by riverlands areas) without clearing the
+# existing waterways.
+func add_river() -> void:
+	var y: int = GROUND
+	var horiz: bool = (randi() & 1) == 1
+	var start: Vector3i
+	var end: Vector3i
+	if horiz:
+		start = Vector3i(0, y, randi() % SZ)
+		end = Vector3i(SX - 1, y, randi() % SZ)
+	else:
+		start = Vector3i(randi() % SX, y, 0)
+		end = Vector3i(randi() % SX, y, SZ - 1)
+	water_sources.append(start)
+	var cur: Vector3i = start
+	var safety: int = SX * SZ
+	while safety > 0:
+		safety -= 1
+		var step: Vector3i = _river_step(cur, end)
+		cells[cur] = Mat.WATER
+		water_flow[cur] = step
+		if cur == end:
+			break
+		cur += step
+		if not in_bounds(cur):
+			break
 
 func _river_step(cur: Vector3i, target: Vector3i) -> Vector3i:
 	var dx: int = signi(target.x - cur.x)
