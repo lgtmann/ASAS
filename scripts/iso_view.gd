@@ -801,7 +801,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				_on_click(get_local_mouse_position())
 			MOUSE_BUTTON_RIGHT:
-				_cancel_action()
+				_on_right_click(get_local_mouse_position())
 			MOUSE_BUTTON_WHEEL_UP:
 				if event.shift_pressed:
 					_set_view_level(view_level + 1)
@@ -838,6 +838,26 @@ func _set_view_level(level: int) -> void:
 func _refresh_level_label() -> void:
 	if level_label != null:
 		level_label.text = "View: level %d" % view_level
+
+# Right-click = attack when it lands on an enemy: swing if adjacent (Chebyshev
+# 1, diagonals included), throw the spade if within throw range. Anywhere else,
+# right-click keeps its cancel behaviour.
+func _on_right_click(p: Vector2) -> void:
+	if _ai_running or gs.is_over:
+		return
+	var sel = gs.selected
+	if sel != null and sel.team == 0 and sel.spade != null:
+		var target = _pick_unit(p)
+		if target != null and target.team != 0 and target.is_alive():
+			var d: int = gs._cheb3(sel.grid, target.grid)
+			if d <= 1:
+				gs.swing_at(sel, target.grid)
+			elif d <= sel.spade.throw_range:
+				gs.throw_at(sel, target.grid)
+			else:
+				gs.notice.emit("Out of range — throw reaches %d." % sel.spade.throw_range)
+			return
+	_cancel_action()
 
 func _cancel_action() -> void:
 	if _ai_running or gs.is_over or _combo_animating:
@@ -1061,7 +1081,7 @@ func _build_hud() -> void:
 	info_label = _label(Vector2(12, 10))
 	status_label = _label(Vector2(12, 36))
 	hint_label = _label(Vector2(12, 62))
-	hint_label.text = "Click a unit to select; click a highlighted cell to act.  Wheel zooms; Shift+wheel scrolls levels; right-click cancels."
+	hint_label.text = "Click a unit to select; click a highlighted cell to act.  RIGHT-CLICK an enemy to attack (swing adjacent / throw at range); right-click elsewhere cancels.  Wheel zooms; Shift+wheel scrolls levels."
 	end_turn_btn = Button.new()
 	end_turn_btn.text = "End Turn"
 	end_turn_btn.position = Vector2(12, 92)
