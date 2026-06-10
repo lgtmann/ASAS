@@ -530,6 +530,9 @@ func buy_blueprint(id: String) -> bool:
 	else:
 		var u: Dictionary = UPGRADES[id]
 		card = _make_card(id, u["title"], u["cost"], u["category"], u["blurb"])
+	# Construction-material purchases EXHAUST when played (one building per
+	# buy). Voluntarily discarding them still cycles them through the deck.
+	card["bought"] = true
 	hand.append(card)
 	cards_drawn.emit(1)
 	notice.emit("Built %s — added to hand." % card["title"])
@@ -632,10 +635,16 @@ func play_structure_at(card, cell: Vector3i) -> bool:
 		notice.emit("%s built." % STRUCTURES[id]["title"])
 		if id == "campsite":
 			_cook_all_food()
-	hand.erase(card)
-	discard.append(card)     # stays in your deck — buy once, reuse forever
+	_consume_played(card)
 	_emit_changed()
 	return true
+
+# Remove a just-played card from the hand. Blueprint-bought cards exhaust
+# (leave the game); everything else cycles into the discard pile.
+func _consume_played(card) -> void:
+	hand.erase(card)
+	if not bool(card.get("bought", false)):
+		discard.append(card)
 
 # ---------------------------------------------------------------- areas / campaign
 
@@ -1713,8 +1722,7 @@ func _apply_combo_upgrades(op, cards: Array) -> void:
 
 func _discard_combo(cards: Array) -> void:
 	for c in cards:
-		hand.erase(c)
-		discard.append(c)
+		_consume_played(c)
 
 # Voluntary discard of selected cards (no energy cost). Drawn replacements
 # only come at the next own-team begin_turn, so discarding mid-turn means
@@ -1789,8 +1797,7 @@ func play_upgrade_at(card, target_cell: Vector3i) -> void:
 	else:
 		return
 	energy -= card["cost"]
-	hand.erase(card)
-	discard.append(card)
+	_consume_played(card)
 	notice.emit("Applied %s." % card["title"])
 	_emit_changed()
 
