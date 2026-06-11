@@ -2,12 +2,12 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cmtqeqysc64si"
+uid="uid://oecxylj1heb8"
 valid=false
 
 [deps]
 
-source_file="res://assets/cards/raw/spade_tip.png"
+source_file="res://assets/cards/raw/dual_wield.png"
 
 [params]
 

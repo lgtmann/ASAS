@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://djdrgd0gqott6"
-path="res://.godot/imported/spade_pick.png-f8a4d31562be959a25c61b6a820a6ca3.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/spade_pick.png"
-dest_files=["res://.godot/imported/spade_pick.png-f8a4d31562be959a25c61b6a820a6ca3.ctex"]
 
 [params]
 

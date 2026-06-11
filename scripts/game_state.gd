@@ -18,6 +18,7 @@ signal unit_attacked(attacker, target_grid)  # melee swing/bite — lunge animat
 signal unit_damaged(unit, amount)            # any damage — hit flash + number
 signal unit_died(unit, grid)                 # death — tip-over ghost animation
 signal terrain_hit(cell, mat)                # dig/chop/smash — particle burst
+signal ballista_fired(cell)                  # sprite fire animation
 
 const MAX_ENERGY := 6                  # leader's combo budget per turn
 const HAND_SIZE := 5
@@ -1209,6 +1210,7 @@ func _fire_ballistas(team: int) -> void:
 					best_d = d
 					best = u
 		if best != null:
+			ballista_fired.emit(g)
 			spade_thrown.emit(g, best.grid, false)   # reuse the projectile arc
 			_damage(best, 2)
 			notice.emit("Ballista fires — 2 dmg!")

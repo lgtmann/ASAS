@@ -133,6 +133,11 @@ var _tree_variants: Array = []
 var _sprout_variants: Array = []
 # Building art keyed by building kind (gs.buildings[cell].kind).
 var _building_sprites: Dictionary = {}
+# Ballista fire animation: 4 sprite frames (loaded/tense/release/settle) and
+# the in-flight animations keyed by ballista cell.
+var _ballista_frames: Array = []
+var _ballista_anims: Dictionary = {}   # cell -> start time
+const BALLISTA_FRAME_TIMES := [0.22, 0.38, 0.70]   # tense / release / settle ends
 
 # --- ambient animation (procedural puppet motion + canvas particles) ---
 var _anim_t: float = 0.0             # global animation clock (secs)
@@ -253,6 +258,7 @@ func _ready() -> void:
 	gs.unit_damaged.connect(_on_unit_damaged)
 	gs.unit_died.connect(_on_unit_died)
 	gs.terrain_hit.connect(_on_terrain_hit)
+	gs.ballista_fired.connect(_on_ballista_fired)
 
 	# Stand up the terrain cache layer AFTER world is ready and before _build_hud.
 	terrain_layer = TerrainLayer.new()
@@ -506,6 +512,14 @@ func _load_terrain_sprites() -> void:
 			"res://assets/cards/dead_tree_1.png", "res://assets/cards/dead_tree_2.png"]:
 		if ResourceLoader.exists(tpath):
 			_tree_variants.append(load(tpath))
+	for fp in ["res://assets/cards/ballista.png",
+			"res://assets/cards/ballista_fire_tense.png",
+			"res://assets/cards/ballista_fire_release.png",
+			"res://assets/cards/ballista_fire_settle.png"]:
+		if ResourceLoader.exists(fp):
+			_ballista_frames.append(load(fp))
+	if _ballista_frames.size() != 4:
+		_ballista_frames.clear()      # incomplete set — stay static
 	for bkind in ["waterwheel", "storehouse", "village", "trebuchet",
 			"farm", "campsite", "barracks"]:
 		var bpath: String = "res://assets/cards/building_%s.png" % bkind
@@ -731,6 +745,31 @@ func _on_unit_died(u, _grid: Vector3i) -> void:
 	_dying.append({"tex": _unit_sprites.get(u.kind), "team": u.team,
 		"feet": iso_pt(u.draw_pos.x, u.draw_pos.y, u.draw_pos.z), "t0": _anim_t})
 
+func _on_ballista_fired(cell: Vector3i) -> void:
+	if not _ballista_frames.is_empty():
+		_ballista_anims[cell] = _anim_t
+
+# Fire frames draw on the LIVE layer directly over the cached static sprite —
+# same rect math as the terrain sprite, so they cover it exactly. When the
+# sequence ends the cached loaded-bolt sprite shows through again (reload).
+func _draw_ballista_anims() -> void:
+	for cell_v in _ballista_anims.keys():
+		var cell: Vector3i = cell_v
+		var t: float = _anim_t - float(_ballista_anims[cell])
+		if t >= BALLISTA_FRAME_TIMES[2]:
+			_ballista_anims.erase(cell)
+			continue
+		var frame: int = 1
+		if t >= BALLISTA_FRAME_TIMES[1]:
+			frame = 3
+		elif t >= BALLISTA_FRAME_TIMES[0]:
+			frame = 2
+		var tex: Texture2D = _ballista_frames[frame]
+		var centre: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y) + 0.5, float(cell.z) + 0.5)
+		var w: float = TILE_W * 1.30
+		var h: float = w * float(tex.get_height()) / float(tex.get_width())
+		draw_texture_rect(tex, Rect2(centre.x - w * 0.5, centre.y - h * 0.5 + 2.0, w, h), false)
+
 func _on_terrain_hit(cell: Vector3i, mat: int) -> void:
 	var top: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y + 1), float(cell.z) + 0.5)
 	_spawn_burst(top, MAT_FX_COLORS.get(mat, Color(0.55, 0.40, 0.26)), 8, 80.0)
@@ -798,6 +837,7 @@ func _draw() -> void:
 	for s in gs.dropped:
 		_draw_dropped_spade(s, 1.0)
 	_draw_streamlines()
+	_draw_ballista_anims()
 	_draw_projectiles()
 	_draw_fx()
 

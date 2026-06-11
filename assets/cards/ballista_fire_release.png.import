@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cmtqeqysc64si"
-valid=false
+uid="uid://dofpdn6k7pr6t"
+path="res://.godot/imported/ballista_fire_release.png-fba6a96c78f612a5e27948e683c96a92.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/spade_tip.png"
+source_file="res://assets/cards/ballista_fire_release.png"
+dest_files=["res://.godot/imported/ballista_fire_release.png-fba6a96c78f612a5e27948e683c96a92.ctex"]
 
 [params]
 

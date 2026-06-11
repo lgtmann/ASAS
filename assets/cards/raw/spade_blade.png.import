@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ciy7kdqqkw4o8"
-path="res://.godot/imported/spade_blade.png-9291f8680c34831701786538602955c5.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/spade_blade.png"
-dest_files=["res://.godot/imported/spade_blade.png-9291f8680c34831701786538602955c5.ctex"]
 
 [params]
 

@@ -272,6 +272,18 @@
   {
    "name": "_frame",
    "prompt": "An ornate but rustic trading-card FRAME in cel-shaded Wind Waker style: weathered driftwood border planks with visible grain, lashed with rope crossings at all four corners, one small seashell accent at the top center. Portrait 2:3 composition. The wooden border occupies the outer 12% of the card on all sides; the ENTIRE central rectangular art window inside the border is filled with pure flat magenta #FF00FF (RGB 255,0,255) edge to edge — no decoration inside the window. Everything outside the card's outer edge is pure flat chroma green #00FF00. Two flat cel tones on the wood, thick dark outlines."
+  },
+  {
+   "name": "ballista_fire_tense",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image — identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain tones, identical outline weight, identical proportions in every part that is not explicitly changed below. This is one frame of a sprite animation, so any unrequested change between frames will cause visible flicker. Background pure flat chroma green #00FF00 edge to edge. CHANGES FOR THIS FRAME ONLY: the twin torsion arms are drawn FURTHER BACK to maximum tension, the bowstring pulled into a deep V holding the loaded bolt, the whole machine very slightly compressed downward as if braced. The bolt is still loaded."
+  },
+  {
+   "name": "ballista_fire_release",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image — identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain tones, identical outline weight, identical proportions in every part that is not explicitly changed below. This is one frame of a sprite animation, so any unrequested change between frames will cause visible flicker. Background pure flat chroma green #00FF00 edge to edge. CHANGES FOR THIS FRAME ONLY: the twin torsion arms have SNAPPED FORWARD to their forward rest position, the bowstring is straight across the front, the bolt is GONE (just fired — the rail is empty), two short white speed lines burst forward from the rail tip."
+  },
+  {
+   "name": "ballista_fire_settle",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image — identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain tones, identical outline weight, identical proportions in every part that is not explicitly changed below. This is one frame of a sprite animation, so any unrequested change between frames will cause visible flicker. Background pure flat chroma green #00FF00 edge to edge. CHANGES FOR THIS FRAME ONLY: the twin torsion arms are forward at rest, the bowstring shows a slight double-line vibration blur, the rail is empty (no bolt), a single small dust puff at the platform base. The machine sits back at normal height."
   }
  ]
 }
