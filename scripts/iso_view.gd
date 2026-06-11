@@ -514,7 +514,7 @@ func _load_terrain_sprites() -> void:
 			_tree_variants.append(load(tpath))
 	for entry in [["body", "res://assets/cards/ballista_body.png"],
 			["bow", "res://assets/cards/ballista_arm_left.png"],
-			["spade", "res://assets/cards/spade.png"]]:
+			["spade", "res://assets/cards/ballista_spade_loaded.png"]]:
 		if ResourceLoader.exists(entry[1]):
 			_ballista_rig_tex[entry[0]] = load(entry[1])
 	for bkind in ["waterwheel", "storehouse", "village", "trebuchet",

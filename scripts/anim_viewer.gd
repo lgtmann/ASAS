@@ -136,7 +136,7 @@ func _ready() -> void:
 	stage.get_parent().add_child(rig_stage)
 	for entry in [["body", "res://assets/cards/ballista_body.png"],
 			["bow", "res://assets/cards/ballista_arm_left.png"],
-			["spade", "res://assets/cards/spade.png"]]:
+			["spade", "res://assets/cards/ballista_spade_loaded.png"]]:
 		if ResourceLoader.exists(entry[1]):
 			_rig_tex[entry[0]] = load(entry[1])
 

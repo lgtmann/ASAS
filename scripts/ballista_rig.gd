@@ -73,20 +73,33 @@ static func draw(canvas: CanvasItem, rect: Rect2, t: float, tex: Dictionary) -> 
 	canvas.draw_texture_rect(bow, Rect2(-MOUNT * s, rect.size), false)
 	canvas.draw_set_transform_matrix(Transform2D())
 
-	# String: code-drawn polyline between the (transformed) bow tips, with the
-	# nock pulled rearward by the draw amount.
+	# String: WW-style rope — dark outline under a tan core, antialiased, with
+	# a slight sag at rest and a sharp V when drawn. Nock knot sells the detail.
 	var tipl: Vector2 = mount_px + slide + (TIP_L - MOUNT) * s * squash
 	var tipr: Vector2 = mount_px + slide + (TIP_R - MOUNT) * s * squash
-	var nock: Vector2 = (tipl + tipr) * 0.5 - fire * (s * DRAW_LEN) * amt
-	var string_w: float = maxf(1.5, s * 0.009)
-	canvas.draw_polyline(PackedVector2Array([tipl, nock, tipr]),
-		Color(0.93, 0.89, 0.78), string_w)
+	var pull: Vector2 = -fire * (s * DRAW_LEN) * amt
+	var nock: Vector2 = (tipl + tipr) * 0.5 + pull
+	var pts: PackedVector2Array
+	if absf(amt) < 0.04:
+		# Near-rest: gentle catenary sag instead of a kinked V.
+		pts = PackedVector2Array()
+		for i in 9:
+			var k: float = float(i) / 8.0
+			var pos: Vector2 = tipl.lerp(tipr, k)
+			pos += Vector2(0, s * 0.006) * sin(k * PI)
+			pts.append(pos)
+	else:
+		pts = PackedVector2Array([tipl, nock, tipr])
+	var rope_out := Color(0.20, 0.13, 0.08)
+	var rope_core := Color(0.78, 0.66, 0.45)
+	canvas.draw_polyline(pts, rope_out, maxf(2.5, s * 0.017), true)
+	canvas.draw_polyline(pts, rope_core, maxf(1.2, s * 0.009), true)
+	# Nock knot.
+	canvas.draw_circle(nock, maxf(2.0, s * 0.013), rope_out)
+	canvas.draw_circle(nock, maxf(1.0, s * 0.008), rope_core)
 
-	# The loaded spade rides the string until release.
+	# The loaded spade: an in-situ full-frame overlay (extracted from an edit
+	# of the base art), so its perspective matches the rail exactly. It rides
+	# the nock rearward during the draw and vanishes at release.
 	if spade != null and t < T_RELEASE:
-		var sp_pos: Vector2 = origin + RAIL_SPADE * s - fire * (s * DRAW_LEN * 0.8) * amt
-		var sw: float = s * 0.30
-		var sh: float = sw * float(spade.get_height()) / float(spade.get_width())
-		canvas.draw_set_transform(sp_pos, fire.angle() - PI * 0.5, Vector2.ONE)
-		canvas.draw_texture_rect(spade, Rect2(-sw * 0.5, -sh * 0.5, sw, sh), false)
-		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		canvas.draw_texture_rect(spade, Rect2(origin + pull * 0.8, rect.size), false)
