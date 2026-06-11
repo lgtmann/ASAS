@@ -436,12 +436,64 @@ func _draw_strata(ta: Vector2, tb: Vector2, ba: Vector2, bb: Vector2, base: Colo
 	for f in [0.38, 0.72]:
 		_draw_canvas.draw_line(ta.lerp(ba, f), tb.lerp(bb, f), band, STRATA_W)
 
+# --- Continuous water ----------------------------------------------------------
+# Water renders like the ground: one flat recessed plane per connected river,
+# with a dark waterline and a pale foam inset only along the banks. Moving
+# foam streaks (live layer) replace the old chevron arrows.
+const WATER_TOP := Color(0.18, 0.46, 0.82)
+const WATER_SIDE := Color(0.13, 0.32, 0.60)
+const WATER_LINE := Color(0.07, 0.16, 0.34)
+const WATER_FOAM := Color(0.88, 0.96, 1.00, 0.40)
+const WATER_LEVEL := 0.45      # surface height within the cell (recessed)
+
+func _water_at(n: Vector3i) -> bool:
+	return world.is_water(n)
+
+func _draw_flat_water(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	var dk: float = (1.0 - SHADOW_DARKEN) if shadowed else 1.0
+	var y: float = float(c.y) + WATER_LEVEL
+	var s_back: Vector2 = iso_pt(float(c.x), y, float(c.z)) + shake
+	var s_right: Vector2 = iso_pt(float(c.x) + 1.0, y, float(c.z)) + shake
+	var s_front: Vector2 = iso_pt(float(c.x) + 1.0, y, float(c.z) + 1.0) + shake
+	var s_left: Vector2 = iso_pt(float(c.x), y, float(c.z) + 1.0) + shake
+	var centre: Vector2 = (s_back + s_front) * 0.5
+	var tc := Color(WATER_TOP.r * dk, WATER_TOP.g * dk, WATER_TOP.b * dk, alpha)
+	_draw_canvas.draw_colored_polygon(
+		PackedVector2Array([s_back, s_right, s_front, s_left]), tc)
+	# Exposed sides (map edge): flat darker panel down to the cell floor.
+	for side in [[Vector3i(1, 0, 0), s_right, s_front, Vector3i(1, 0, 0), Vector3i(1, 0, 1)],
+			[Vector3i(0, 0, 1), s_front, s_left, Vector3i(1, 0, 1), Vector3i(0, 0, 1)]]:
+		var n: Vector3i = c + side[0]
+		if not world.in_bounds(n) or (not world.is_solid(n) and not _water_at(n)):
+			var ba: Vector2 = iso(c + side[3]) + shake
+			var bb: Vector2 = iso(c + side[4]) + shake
+			var sc := Color(WATER_SIDE.r * dk, WATER_SIDE.g * dk, WATER_SIDE.b * dk, alpha)
+			_draw_canvas.draw_colored_polygon(
+				PackedVector2Array([side[1], side[2], bb, ba]), sc)
+	# Banks: dark waterline + pale foam inset where the neighbour isn't water.
+	var edges := [
+		[Vector3i(0, 0, -1), s_back, s_right],
+		[Vector3i(1, 0, 0), s_right, s_front],
+		[Vector3i(0, 0, 1), s_front, s_left],
+		[Vector3i(-1, 0, 0), s_left, s_back],
+	]
+	for e in edges:
+		if _water_at(c + e[0]):
+			continue
+		var a: Vector2 = e[1]
+		var b: Vector2 = e[2]
+		_draw_canvas.draw_line(a, b, Color(WATER_LINE.r, WATER_LINE.g, WATER_LINE.b, alpha), 2.2)
+		var fa: Vector2 = a.lerp(centre, 0.13)
+		var fb: Vector2 = b.lerp(centre, 0.13)
+		var foam := WATER_FOAM
+		foam.a *= alpha
+		_draw_canvas.draw_line(fa, fb, foam, 2.0)
+
 # Pull any present terrain art into the sprite override table. Each entry
 # maps a material to its texture; missing files silently fall back to the
 # polygon renderer, so artwork can be added one terrain type at a time.
 func _load_terrain_sprites() -> void:
 	var manifest := {
-		VoxelWorld.Mat.WATER: "res://assets/cards/water.png",
 		VoxelWorld.Mat.STONE: "res://assets/cards/boulder.png",
 		VoxelWorld.Mat.LADDER: "res://assets/cards/ladder.png",
 		VoxelWorld.Mat.BRIDGE: "res://assets/cards/bridge.png",
@@ -617,7 +669,6 @@ const TERRAIN_SPRITE_V_NUDGE := 6.0    # px to shift sprites down, since image
 #  - WATER sits at the TOP of its cell (river surface), not centre.
 #  - STONE is a rounded boulder, smaller than a full cube.
 const _TERRAIN_OVERRIDES := {
-	VoxelWorld.Mat.WATER: {"scale": 1.45, "v": -10.0},
 	VoxelWorld.Mat.STONE: {"scale": 1.10, "v": 4.0},
 	VoxelWorld.Mat.LADDER: {"scale": 1.15, "v": 0.0},
 	VoxelWorld.Mat.BRIDGE: {"scale": 1.45, "v": -11.0},   # deck at the top face
@@ -747,46 +798,43 @@ func _draw() -> void:
 		_draw_unit(u, 1.0)
 	for s in gs.dropped:
 		_draw_dropped_spade(s, 1.0)
-	_draw_flow_arrows()
+	_draw_streamlines()
 	_draw_projectiles()
 	_draw_fx()
 
-func _draw_flow_arrows() -> void:
-	# A small white triangle on the top face of every water cell, pointing in
-	# the local flow direction so you can read the river at a glance.
+func _draw_streamlines() -> void:
+	# Thin foam streaks drifting with the current — two per water cell, with
+	# hashed lateral offsets, lengths, and phases so the river reads as a
+	# living flow rather than a marching grid of arrows.
 	if world == null:
 		return
-	var arrow_col := Color(0.95, 0.97, 1.00, 0.85)
-	var outline_col := Color(0.08, 0.18, 0.30, 0.85)
 	for cell_v in world.water_flow.keys():
 		var cell: Vector3i = cell_v
-		# Top centre of the water cell's cube face.
-		var top := iso_pt(float(cell.x) + 0.5, float(cell.y + 1), float(cell.z) + 0.5)
 		var flow: Vector3i = world.water_flow[cell]
-		# Iso projection of a unit flow vector ignoring y.
 		var dir: Vector2 = Vector2(
 			(float(flow.x) - float(flow.z)) * TILE_W * 0.5,
 			(float(flow.x) + float(flow.z)) * TILE_H * 0.5).normalized()
 		if dir == Vector2.ZERO:
 			continue
 		var perp := Vector2(-dir.y, dir.x)
-		# Drift downstream and loop; fade in/out at the ends so the loop seam
-		# is invisible. Per-cell phase offset keeps the river from marching in
-		# lockstep.
-		var phase: float = fmod(_anim_t * 0.5 + float(cell.x * 7 + cell.z * 13) * 0.137, 1.0)
-		var drift: Vector2 = dir * ((phase - 0.5) * TILE_W * 0.38)
-		var fade: float = sin(phase * PI)
-		var ac := arrow_col
-		ac.a *= fade
-		var oc := outline_col
-		oc.a *= fade
-		var tip: Vector2 = top + drift + dir * 11.0
-		var b1: Vector2 = top + drift - dir * 4.0 + perp * 5.0
-		var b2: Vector2 = top + drift - dir * 4.0 - perp * 5.0
-		draw_colored_polygon(PackedVector2Array([tip, b1, b2]), ac)
-		draw_polyline(PackedVector2Array([tip, b1, b2, tip]), oc, 1.0)
+		var surf: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y) + WATER_LEVEL + 0.02,
+				float(cell.z) + 0.5)
+		var h: int = _wang_hash(cell.x * 92821 + cell.z * 31337)
+		for i in 2:
+			var hh: int = _wang_hash(h + i * 7919)
+			var lat: float = (float(hh % 1000) / 1000.0 - 0.5) * TILE_H * 0.55
+			var ln: float = 9.0 + float((hh >> 10) % 8)
+			var speed: float = 0.42 + float((hh >> 14) % 100) / 500.0
+			var phase: float = fmod(_anim_t * speed + float((hh >> 6) % 628) / 100.0, 1.0)
+			var along: float = (phase - 0.5) * TILE_W * 0.52
+			var p0: Vector2 = surf + perp * lat + dir * (along - ln * 0.5)
+			var p2: Vector2 = surf + perp * lat + dir * (along + ln * 0.5)
+			var p1: Vector2 = (p0 + p2) * 0.5 + perp * sin(phase * TAU + float(i) * 2.1) * 1.6
+			var a: float = sin(phase * PI) * 0.75
+			var col := Color(0.88, 0.96, 1.00, a)
+			draw_polyline(PackedVector2Array([p0, p1, p2]), col, 2.0)
 
-# Death ghosts (tip over + fade), particles, floating damage numbers.
+
 func _draw_fx() -> void:
 	for g in _dying:
 		var t: float = clampf((_anim_t - float(g["t0"])) / DEATH_DUR, 0.0, 1.0)
@@ -899,11 +947,9 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 			return                  # not the base — already drawn by it
 		_draw_tree(c, alpha, shake, shadowed)
 		return
-	# Water sprite override: water cells don't have a FULL_PATTERN (they sit
-	# slim at the trench bottom), so they need their own short-circuit before
-	# the pattern check. Existing chevron overlay still draws on top.
-	if mat == VoxelWorld.Mat.WATER and seen_it and _terrain_sprites.has(mat):
-		_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
+	# Water: continuous recessed plane with bank waterlines + foam.
+	if mat == VoxelWorld.Mat.WATER and seen_it:
+		_draw_flat_water(c, alpha, shake, shadowed)
 		return
 	# Boulder sprite override: rounded shape, not a cube.
 	if mat == VoxelWorld.Mat.STONE and seen_it and _terrain_sprites.has(mat):
@@ -1138,6 +1184,8 @@ func _draw_unit(u, alpha: float) -> void:
 	# Use the animated render position so moves lerp smoothly. Falls back to
 	# the logical cell if draw_pos is uninitialised (e.g. legacy spawns).
 	var dp: Vector3 = u.draw_pos if u.draw_pos != Vector3.ZERO else Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
+	if u.kind == "boat":
+		dp.y += WATER_LEVEL          # hull rides the water surface
 	var feet: Vector2 = iso_pt(dp.x, dp.y, dp.z)
 	# Procedural puppet motion: hop arc while moving, gentle idle bob (phase
 	# offset per unit so the army doesn't breathe in sync), lunge on attack.
