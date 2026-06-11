@@ -135,6 +135,28 @@ var _tree_variants: Array = []
 var _sprout_variants: Array = []
 # Building art keyed by building kind (gs.buildings[cell].kind).
 var _building_sprites: Dictionary = {}
+
+# --- ambient animation (procedural puppet motion + canvas particles) ---
+var _anim_t: float = 0.0             # global animation clock (secs)
+var _move_anim: Dictionary = {}      # unit -> hop start time
+var _lunges: Dictionary = {}         # unit -> {"dir": Vector2, "t0": float}
+var _hit_flash: Dictionary = {}      # unit -> flash start time
+var _dying: Array = []               # death ghosts: {tex, team, feet, t0}
+var _dmg_numbers: Array = []         # {pos, text, t0, col}
+var _fx: Array = []                  # particles: {pos, vel, t0, life, col, r}
+var _smoke_timers: Dictionary = {}   # building cell -> next puff time
+const LUNGE_DUR := 0.22
+const FLASH_DUR := 0.25
+const DEATH_DUR := 0.7
+const DMG_DUR := 0.9
+const MAT_FX_COLORS := {
+	VoxelWorld.Mat.EARTH: Color(0.55, 0.40, 0.26),
+	VoxelWorld.Mat.TREE: Color(0.45, 0.70, 0.30),
+	VoxelWorld.Mat.STONE: Color(0.62, 0.62, 0.65),
+	VoxelWorld.Mat.GOLD: Color(0.96, 0.80, 0.25),
+	VoxelWorld.Mat.CRYSTAL: Color(0.55, 0.82, 1.00),
+	VoxelWorld.Mat.OIL: Color(0.20, 0.17, 0.13),
+}
 # Unit body art keyed by kind — auto-loaded from assets/cards/unit_<kind>.png.
 # Missing kinds fall back to the capsule renderer.
 var _unit_sprites: Dictionary = {}
@@ -228,6 +250,10 @@ func _ready() -> void:
 	gs.unit_animated_move.connect(_on_unit_animated_move)
 	gs.quake_started.connect(_on_quake_started)
 	gs.area_cleared.connect(_on_area_cleared)
+	gs.unit_attacked.connect(_on_unit_attacked)
+	gs.unit_damaged.connect(_on_unit_damaged)
+	gs.unit_died.connect(_on_unit_died)
+	gs.terrain_hit.connect(_on_terrain_hit)
 
 	# Stand up the terrain cache layer AFTER world is ready and before _build_hud.
 	terrain_layer = TerrainLayer.new()
@@ -555,6 +581,39 @@ func _draw_building_sprite(c: Vector3i, tex: Texture2D, alpha: float, shake: Vec
 		tint = Color(d, d, d, alpha)
 	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
 
+# ------------------------------------------------------------- animation fx
+
+func _on_unit_attacked(attacker, target_grid: Vector3i) -> void:
+	var from: Vector2 = iso_pt(attacker.draw_pos.x, attacker.draw_pos.y, attacker.draw_pos.z)
+	var to: Vector2 = iso_pt(float(target_grid.x) + 0.5, float(target_grid.y), float(target_grid.z) + 0.5)
+	var d: Vector2 = to - from
+	_lunges[attacker] = {"dir": d.normalized() if d.length() > 0.5 else Vector2.RIGHT,
+			"t0": _anim_t}
+
+func _on_unit_damaged(u, amount: int) -> void:
+	_hit_flash[u] = _anim_t
+	var feet: Vector2 = iso_pt(u.draw_pos.x, u.draw_pos.y, u.draw_pos.z)
+	_dmg_numbers.append({"pos": feet + Vector2(0, -HEIGHT_STEP * 1.8),
+		"text": "-%d" % amount, "t0": _anim_t,
+		"col": Color(1.0, 0.32, 0.25) if u.team == 0 else Color(1.0, 0.88, 0.30)})
+	_spawn_burst(feet + Vector2(0, -10), Color(1, 1, 1, 0.9), 5, 60.0)
+
+func _on_unit_died(u, _grid: Vector3i) -> void:
+	_dying.append({"tex": _unit_sprites.get(u.kind), "team": u.team,
+		"feet": iso_pt(u.draw_pos.x, u.draw_pos.y, u.draw_pos.z), "t0": _anim_t})
+
+func _on_terrain_hit(cell: Vector3i, mat: int) -> void:
+	var top: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y + 1), float(cell.z) + 0.5)
+	_spawn_burst(top, MAT_FX_COLORS.get(mat, Color(0.55, 0.40, 0.26)), 8, 80.0)
+
+func _spawn_burst(pos: Vector2, col: Color, n: int, speed: float) -> void:
+	for i in n:
+		var ang: float = randf() * TAU
+		var v := Vector2(cos(ang), sin(ang) * 0.6) * speed * (0.5 + randf() * 0.8)
+		v.y -= speed * 0.7      # pop upward, gravity pulls back in _process
+		_fx.append({"pos": pos, "vel": v, "t0": _anim_t,
+			"life": 0.45 + randf() * 0.3, "col": col, "r": 2.0 + randf() * 2.5})
+
 # ---------------------------------------------------------------- iso math
 
 func iso_pt(x: float, y: float, z: float) -> Vector2:
@@ -611,6 +670,7 @@ func _draw() -> void:
 		_draw_dropped_spade(s, 1.0)
 	_draw_flow_arrows()
 	_draw_projectiles()
+	_draw_fx()
 
 func _draw_flow_arrows() -> void:
 	# A small white triangle on the top face of every water cell, pointing in
@@ -631,11 +691,54 @@ func _draw_flow_arrows() -> void:
 		if dir == Vector2.ZERO:
 			continue
 		var perp := Vector2(-dir.y, dir.x)
-		var tip: Vector2 = top + dir * 11.0
-		var b1: Vector2 = top - dir * 4.0 + perp * 5.0
-		var b2: Vector2 = top - dir * 4.0 - perp * 5.0
-		draw_colored_polygon(PackedVector2Array([tip, b1, b2]), arrow_col)
-		draw_polyline(PackedVector2Array([tip, b1, b2, tip]), outline_col, 1.0)
+		# Drift downstream and loop; fade in/out at the ends so the loop seam
+		# is invisible. Per-cell phase offset keeps the river from marching in
+		# lockstep.
+		var phase: float = fmod(_anim_t * 0.5 + float(cell.x * 7 + cell.z * 13) * 0.137, 1.0)
+		var drift: Vector2 = dir * ((phase - 0.5) * TILE_W * 0.38)
+		var fade: float = sin(phase * PI)
+		var ac := arrow_col
+		ac.a *= fade
+		var oc := outline_col
+		oc.a *= fade
+		var tip: Vector2 = top + drift + dir * 11.0
+		var b1: Vector2 = top + drift - dir * 4.0 + perp * 5.0
+		var b2: Vector2 = top + drift - dir * 4.0 - perp * 5.0
+		draw_colored_polygon(PackedVector2Array([tip, b1, b2]), ac)
+		draw_polyline(PackedVector2Array([tip, b1, b2, tip]), oc, 1.0)
+
+# Death ghosts (tip over + fade), particles, floating damage numbers.
+func _draw_fx() -> void:
+	for g in _dying:
+		var t: float = clampf((_anim_t - float(g["t0"])) / DEATH_DUR, 0.0, 1.0)
+		var a: float = 1.0 - t
+		var tex: Texture2D = g["tex"]
+		var feet: Vector2 = g["feet"]
+		if tex != null:
+			var uw: float = TILE_W * UNIT_SPRITE_SCALE
+			var uh: float = uw * float(tex.get_height()) / float(tex.get_width())
+			var mod := Color(1.0, 0.7, 0.7, a) if int(g["team"]) == 1 else Color(1, 1, 1, a)
+			draw_set_transform(feet, t * 1.35, Vector2.ONE)
+			draw_texture_rect(tex, Rect2(-uw * 0.5, -uh * UNIT_GROUND_FRAC, uw, uh), false, mod)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		else:
+			draw_circle(feet, 2.0 + 8.0 * a, Color(0.25, 0.25, 0.28, a))
+	for f in _fx:
+		var ft: float = clampf((_anim_t - float(f["t0"])) / float(f["life"]), 0.0, 1.0)
+		var c: Color = f["col"]
+		c.a *= (1.0 - ft)
+		draw_circle(f["pos"], float(f["r"]) * (1.0 - ft * 0.5), c)
+	var font := ThemeDB.fallback_font
+	if font != null:
+		for d in _dmg_numbers:
+			var t2: float = clampf((_anim_t - float(d["t0"])) / DMG_DUR, 0.0, 1.0)
+			var pos: Vector2 = d["pos"] + Vector2(0, -26.0 * t2)
+			var col: Color = d["col"]
+			col.a = 1.0 - t2 * t2
+			draw_string(font, pos + Vector2(1, 1), String(d["text"]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0, 0, 0, col.a * 0.8))
+			draw_string(font, pos, String(d["text"]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col)
 
 func _level_alpha(y: int) -> float:
 	# Alpha for solid-rendered cubes. Above-focal cubes only reach here when
@@ -955,6 +1058,16 @@ func _draw_unit(u, alpha: float) -> void:
 	# the logical cell if draw_pos is uninitialised (e.g. legacy spawns).
 	var dp: Vector3 = u.draw_pos if u.draw_pos != Vector3.ZERO else Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
 	var feet: Vector2 = iso_pt(dp.x, dp.y, dp.z)
+	# Procedural puppet motion: hop arc while moving, gentle idle bob (phase
+	# offset per unit so the army doesn't breathe in sync), lunge on attack.
+	if _move_anim.has(u):
+		var mt: float = clampf((_anim_t - float(_move_anim[u])) / 0.26, 0.0, 1.0)
+		feet.y -= sin(mt * PI) * 6.0
+	else:
+		feet.y += sin(_anim_t * 4.6 + float(u.get_instance_id() % 628) / 100.0) * 1.4
+	if _lunges.has(u):
+		var lt: float = clampf((_anim_t - float(_lunges[u]["t0"])) / LUNGE_DUR, 0.0, 1.0)
+		feet += _lunges[u]["dir"] * (sin(lt * PI) * 12.0)
 	var col: Color
 	if u.kind == "leader":
 		col = LEADER_COLOR
@@ -1001,6 +1114,10 @@ func _draw_unit(u, alpha: float) -> void:
 			umod = Color(1.0, 0.62, 0.62, alpha)
 		if u == gs.selected:
 			umod = umod.lightened(0.25)
+		if _hit_flash.has(u):
+			var ft: float = 1.0 - clampf((_anim_t - float(_hit_flash[u])) / FLASH_DUR, 0.0, 1.0)
+			umod = umod.lightened(0.8 * ft)
+			draw_circle(feet - Vector2(0, 14), 6.0 + 14.0 * (1.0 - ft), Color(1, 1, 1, 0.5 * ft))
 		draw_texture_rect(utex, urect, false, umod)
 		body_top = feet - Vector2(0, uh * 0.8)   # badges anchor above the sprite
 	else:
@@ -1101,13 +1218,44 @@ func _process(delta: float) -> void:
 	# only redraws when we ask it to. Keep queueing while any move is in flight.
 	if _moves_in_flight > 0:
 		queue_redraw()
-	if projectiles.is_empty():
-		return
 	for p in projectiles:
 		p["t"] += delta / p["dur"]
 	# One-way ends at t=1; boomerangs run there-and-back, ending at t=2.
 	projectiles = projectiles.filter(func(p):
 		return p["t"] < (2.0 if p["boomerang"] else 1.0))
+
+	# --- ambient animation clock + particle simulation ---
+	_anim_t += delta
+	# Chimney smoke from villages / campsites.
+	for cell_v in gs.buildings.keys():
+		var b: Dictionary = gs.buildings[cell_v]
+		var kind: String = String(b["kind"])
+		if kind != "village" and kind != "campsite":
+			continue
+		if _anim_t >= float(_smoke_timers.get(cell_v, 0.0)):
+			_smoke_timers[cell_v] = _anim_t + 0.9 + randf() * 0.7
+			var c: Vector3i = cell_v
+			var top: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 1.6, float(c.z) + 0.5)
+			_fx.append({"pos": top, "vel": Vector2(randf() * 8.0 - 4.0, -18.0 - randf() * 8.0),
+				"t0": _anim_t, "life": 1.6,
+				"col": Color(0.93, 0.93, 0.96, 0.50), "r": 3.0 + randf() * 2.5})
+	# Particle physics: drift + drag + gravity for bursts (smoke rises free).
+	for f in _fx:
+		f["pos"] += f["vel"] * delta
+		if float(f["col"].a) > 0.55:
+			f["vel"] = f["vel"] + Vector2(0, 160.0 * delta)   # gravity on debris
+	_fx = _fx.filter(func(f): return _anim_t - float(f["t0"]) < float(f["life"]))
+	# Expire transient unit effects.
+	for u in _hit_flash.keys():
+		if _anim_t - float(_hit_flash[u]) > FLASH_DUR:
+			_hit_flash.erase(u)
+	for u in _lunges.keys():
+		if _anim_t - float(_lunges[u]["t0"]) > LUNGE_DUR:
+			_lunges.erase(u)
+	_dying = _dying.filter(func(g): return _anim_t - float(g["t0"]) < DEATH_DUR)
+	_dmg_numbers = _dmg_numbers.filter(func(d): return _anim_t - float(d["t0"]) < DMG_DUR)
+	# Ambient animation = continuous redraw. Terrain stays cached, so the
+	# per-frame cost is only units + fx + HUD overlays.
 	queue_redraw()
 
 # Earthquake fired — set up a random phase per affected (x, z) column so they
@@ -1139,10 +1287,13 @@ func _on_unit_animated_move(u, from_g: Vector3i, to_g: Vector3i) -> void:
 	u.draw_pos = Vector3(from_g.x + 0.5, float(from_g.y), from_g.z + 0.5)
 	var to_pos := Vector3(to_g.x + 0.5, float(to_g.y), to_g.z + 0.5)
 	_moves_in_flight += 1
+	_move_anim[u] = _anim_t
 	var tween := create_tween()
 	tween.tween_property(u, "draw_pos", to_pos, 0.26) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.finished.connect(func(): _moves_in_flight -= 1)
+	tween.finished.connect(func():
+		_moves_in_flight -= 1
+		_move_anim.erase(u))
 
 func _draw_projectiles() -> void:
 	for p in projectiles:

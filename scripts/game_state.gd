@@ -14,6 +14,10 @@ signal game_over(winner_team)           # fires once when a team is wiped
 signal unit_animated_move(unit, from_grid, to_grid)   # iso_view tweens draw_pos
 signal quake_started(columns)           # Array[Vector2i] of (x, z) columns to shake
 signal area_cleared(area_num)           # all enemies dead — offer reward + expansion
+signal unit_attacked(attacker, target_grid)  # melee swing/bite — lunge animation
+signal unit_damaged(unit, amount)            # any damage — hit flash + number
+signal unit_died(unit, grid)                 # death — tip-over ghost animation
+signal terrain_hit(cell, mat)                # dig/chop/smash — particle burst
 
 const MAX_ENERGY := 6                  # leader's combo budget per turn
 const HAND_SIZE := 5
@@ -1079,7 +1083,7 @@ func play_ritual_at(card, cell: Vector3i) -> bool:
 				for y in range(world.SY - 1, -1, -1):
 					var p := Vector3i(cx, y, cz)
 					if world.is_solid(p):
-						_treasure_reward(world.dig_cell(p))
+						_treasure_reward(world.dig_cell(p), p)
 						dug += 1
 						break
 			notice.emit("Excavated %d tile(s)." % dug)
@@ -1494,6 +1498,7 @@ func bite(u, target) -> void:
 		return
 	if not _consume_action(u):
 		return
+	unit_attacked.emit(u, target.grid)
 	_damage(target, 2)
 	notice.emit("%s attacks for 2." % u.kind.capitalize())
 	_emit_changed()
@@ -2096,11 +2101,11 @@ func _plow_swath(u, from_g: Vector3i, dest: Vector3i) -> void:
 				continue
 			if world.material_at(p) == VoxelWorld.Mat.TREE:
 				for tc in tree_column_cells(p):
-					var lab2: String = _treasure_reward(world.dig_cell(tc))
+					var lab2: String = _treasure_reward(world.dig_cell(tc), tc)
 					if lab2 != "":
 						rewards.append(lab2)
 			else:
-				var lab: String = _treasure_reward(world.dig_cell(p))
+				var lab: String = _treasure_reward(world.dig_cell(p), p)
 				if lab != "":
 					rewards.append(lab)
 			hit += 1
@@ -2134,13 +2139,13 @@ func dig_at(u, cell: Vector3i) -> void:
 			if not world.is_solid(below):
 				break
 			var mat: int = world.dig_cell(below)
-			var label: String = _treasure_reward(mat)
+			var label: String = _treasure_reward(mat, below)
 			if label != "":
 				rewards.append(label)
 			u.grid = below
 	else:
 		var mat: int = world.dig_cell(cell)
-		var label: String = _treasure_reward(mat)
+		var label: String = _treasure_reward(mat, cell)
 		if label != "":
 			rewards.append(label)
 	# Dirt has to go somewhere. Pick an adjacent empty standable cell (preferring
@@ -2164,7 +2169,9 @@ func dig_at(u, cell: Vector3i) -> void:
 # Returns null if there's nowhere reasonable for the dirt to land.
 # Apply the energy / card / hand reward for breaking through a treasure tile.
 # Returns a short label of what was hit, for the notice line.
-func _treasure_reward(mat: int) -> String:
+func _treasure_reward(mat: int, cell := Vector3i(-9999, 0, 0)) -> String:
+	if cell.x != -9999:
+		terrain_hit.emit(cell, mat)
 	match mat:
 		VoxelWorld.Mat.EARTH:
 			earth[active_team] += 1
@@ -2280,13 +2287,13 @@ func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
 			if not world.is_solid(below):
 				break
 			var mat: int = world.dig_cell(below)
-			var label: String = _treasure_reward(mat)
+			var label: String = _treasure_reward(mat, below)
 			if label != "":
 				rewards.append(label)
 			u.grid = below
 	else:
 		var mat: int = world.dig_cell(source)
-		var label: String = _treasure_reward(mat)
+		var label: String = _treasure_reward(mat, source)
 		if label != "":
 			rewards.append(label)
 	var damming: bool = world.is_water(dest)
@@ -2347,6 +2354,7 @@ func swing_at(u, cell: Vector3i) -> void:
 	if enemy != null and enemy.team != u.team:
 		if not _consume_action(u):
 			return
+		unit_attacked.emit(u, cell)
 		var dmg: int = base + (1 if u.spade.head == "spade_blade" else 0)
 		_damage(enemy, dmg)
 		notice.emit("Swing hit for %d." % dmg)
@@ -2361,17 +2369,17 @@ func swing_at(u, cell: Vector3i) -> void:
 		var m: int = world.dig_cell(cell)
 		if m == VoxelWorld.Mat.TREE:
 			# One chop fells the WHOLE trunk column — wood for every cell.
-			_treasure_reward(m)
+			_treasure_reward(m, cell)
 			var felled: int = 1
 			for vdir in [Vector3i(0, 1, 0), Vector3i(0, -1, 0)]:
 				var p: Vector3i = cell + vdir
 				while world.material_at(p) == VoxelWorld.Mat.TREE:
-					_treasure_reward(world.dig_cell(p))
+					_treasure_reward(world.dig_cell(p), p)
 					felled += 1
 					p += vdir
 			notice.emit("Felled the tree! (+%d wood, bank=%d)" % [felled, wood[active_team]])
 		else:
-			var reward: String = _treasure_reward(m)
+			var reward: String = _treasure_reward(m, cell)
 			if reward != "":
 				notice.emit(reward)
 			elif m == VoxelWorld.Mat.STONE:
@@ -2504,7 +2512,9 @@ func _special_earthquake(u, radius: int) -> void:
 
 func _damage(u, amount: int) -> void:
 	u.hp -= amount
+	unit_damaged.emit(u, amount)
 	if not u.is_alive():
+		unit_died.emit(u, u.grid)
 		_kill(u)
 
 func _kill(u) -> void:
