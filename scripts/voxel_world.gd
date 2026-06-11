@@ -1,9 +1,9 @@
 class_name VoxelWorld
-extends Node3D
+extends Node
 
-# The 3D voxel grid for ASAS. Each cell holds a material; air cells are simply
-# absent from `cells`. Owns the cube meshes and exposes queries/mutations the
-# game logic uses (dig, clear, walkability). World units == grid units (1 cube).
+# The voxel grid for ASAS — pure data. Each cell holds a material; air cells
+# are simply absent from `cells`. Exposes the queries/mutations the game logic
+# uses (dig, clear, walkability); rendering is iso_view's job entirely.
 
 # Fired whenever any cell's material changes. The iso_view's terrain cache
 # uses this to know when it needs to re-render.
@@ -30,11 +30,6 @@ const STONE_PIECES := 6        # surface boulders (+1 height)
 const TREE_PIECES := 12        # surface trees (chop for +1 wood)
 
 var cells := {}                 # Vector3i -> Mat (non-air only)
-var cube_nodes := {}            # Vector3i -> MeshInstance3D
-var cubes_root: Node3D
-var _box: BoxMesh
-var _mats := {}                 # Mat -> StandardMaterial3D
-var skip_3d_rendering: bool = false   # set before add_child for 2D views
 # Each water cell's local flow direction (Vector3i; cardinal +/-X / +/-Z).
 # When the river is diverted (via dig), new water cells inherit the direction
 # of the adjacent water cell they were spread from.
@@ -46,32 +41,6 @@ const TREE_HEIGHT := 3            # cells tall — bottom 2 = full trunk, top = 
 
 func _ready() -> void:
 	generate()
-	if not skip_3d_rendering:
-		cubes_root = Node3D.new()
-		add_child(cubes_root)
-		_box = BoxMesh.new()
-		_box.size = Vector3(0.96, 0.96, 0.96)
-		_build_materials()
-		rebuild()
-
-func _build_materials() -> void:
-	_mats[Mat.EARTH] = _make_mat(Color(0.46, 0.33, 0.22))
-	_mats[Mat.GOLD] = _make_mat(Color(0.95, 0.78, 0.18))
-	_mats[Mat.WATER] = _make_mat(Color(0.25, 0.5, 0.85))
-	_mats[Mat.CRYSTAL] = _make_mat(Color(0.45, 0.78, 1.00))
-	_mats[Mat.RELIC] = _make_mat(Color(0.82, 0.38, 0.95))
-	_mats[Mat.OIL] = _make_mat(Color(0.15, 0.12, 0.08))
-	_mats[Mat.STONE] = _make_mat(Color(0.55, 0.55, 0.58))
-	_mats[Mat.TREE] = _make_mat(Color(0.30, 0.45, 0.22))
-	_mats[Mat.LADDER] = _make_mat(Color(0.78, 0.62, 0.38))
-	_mats[Mat.BRIDGE] = _make_mat(Color(0.62, 0.45, 0.28))
-	_mats[Mat.BALLISTA] = _make_mat(Color(0.38, 0.30, 0.24))
-	_mats[Mat.BUILDING] = _make_mat(Color(0.72, 0.62, 0.45))
-
-func _make_mat(c: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = c
-	return m
 
 # ---------------------------------------------------------------- generation
 
@@ -385,12 +354,6 @@ func surface_cell(x: int, z: int) -> Vector3i:
 			return p
 	return Vector3i(x, GROUND + 1, z)
 
-func world_pos(p: Vector3i) -> Vector3:
-	return Vector3(p.x + 0.5, p.y, p.z + 0.5)
-
-func center() -> Vector3:
-	return Vector3(SX * 0.5, GROUND, SZ * 0.5)
-
 # ---------------------------------------------------------------- mutations
 
 # Remove a solid cell; returns the material that was there (for bonuses).
@@ -411,31 +374,5 @@ func set_material(p: Vector3i, m: int) -> void:
 	else:
 		cells[p] = m
 	version += 1
-	_refresh_cube(p)
 	cells_changed.emit()
 
-# ---------------------------------------------------------------- rendering
-
-func rebuild() -> void:
-	for c in cube_nodes.values():
-		c.queue_free()
-	cube_nodes.clear()
-	for p in cells:
-		_make_cube(p)
-
-func _refresh_cube(p: Vector3i) -> void:
-	if skip_3d_rendering:
-		return
-	if cube_nodes.has(p):
-		cube_nodes[p].queue_free()
-		cube_nodes.erase(p)
-	if cells.has(p):
-		_make_cube(p)
-
-func _make_cube(p: Vector3i) -> void:
-	var mi := MeshInstance3D.new()
-	mi.mesh = _box
-	mi.material_override = _mats.get(cells[p], _mats[Mat.EARTH])
-	mi.position = world_pos(p) + Vector3(0, 0.5, 0)
-	cubes_root.add_child(mi)
-	cube_nodes[p] = mi

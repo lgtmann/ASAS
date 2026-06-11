@@ -146,7 +146,6 @@ var info_label: Label
 var status_label: Label
 var hint_label: Label
 var end_turn_btn: Button
-var view_btn: Button
 var level_up_btn: Button
 var level_dn_btn: Button
 var level_label: Label
@@ -199,7 +198,6 @@ const QUAKE_FREQ := 28.0                # rad/sec (≈4.5 cycles/sec)
 
 func _ready() -> void:
 	world = VoxelWorld.new()
-	world.skip_3d_rendering = true
 	add_child(world)
 	_sub_draw_order = _compute_sub_draw_order()
 
@@ -1505,12 +1503,6 @@ func _build_hud() -> void:
 	hud.add_child(level_dn_btn)
 	_refresh_level_label()
 
-	view_btn = Button.new()
-	view_btn.text = "Switch to 3D"
-	view_btn.position = Vector2(1470, 12)
-	view_btn.size = Vector2(118, 32)
-	view_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_3d.tscn"))
-	hud.add_child(view_btn)
 
 # ---------------------------------------------------------------- modals
 
