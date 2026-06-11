@@ -10,6 +10,10 @@ const ANIMATIONS := [
 		"name": "Ballista (RIG)",
 		"rig": true,
 	},
+	{"name": "Operator: Dig", "action": "dig"},
+	{"name": "Operator: Swing", "action": "swing"},
+	{"name": "Operator: Throw", "action": "throw"},
+	{"name": "Operator: Fish", "action": "fish"},
 	{
 		"name": "Ballista Fire (16f)",
 		"frames": [
@@ -49,6 +53,10 @@ var rig_stage: Control
 var _rig_mode: bool = false
 var _rig_t: float = -0.3        # idle hold before the cycle starts
 var _rig_tex: Dictionary = {}
+var action_stage: Control
+var _action_type: String = ""
+var _act_t: float = -0.25       # idle hold, then the action cycle
+var _act_tex: Dictionary = {}
 var info: Label
 var play_btn: Button
 
@@ -140,6 +148,17 @@ func _ready() -> void:
 		if ResourceLoader.exists(entry[1]):
 			_rig_tex[entry[0]] = load(entry[1])
 
+	# Action stage: replays the shared SpadeActions pose math, scaled up.
+	action_stage = Control.new()
+	action_stage.position = stage.position
+	action_stage.size = stage.size
+	action_stage.draw.connect(_draw_action_stage)
+	stage.get_parent().add_child(action_stage)
+	for entry in [["operator", "res://assets/cards/unit_operator.png"],
+			["spade", "res://assets/cards/spade.png"]]:
+		if ResourceLoader.exists(entry[1]):
+			_act_tex[entry[0]] = load(entry[1])
+
 	_load_anim(0)
 	# Tuning harness: --anim-shot=path [--anim-idx=N] [--anim-t=f]
 	var shot_path := ""
@@ -154,8 +173,63 @@ func _ready() -> void:
 	if shot_path != "":
 		_playing = false
 		_rig_t = shot_t
+		_act_t = shot_t
 		rig_stage.queue_redraw()
+		action_stage.queue_redraw()
 		_shot_and_quit(shot_path)
+
+# Draw the operator + spade prop at stage scale, replaying the exact pose
+# math the game uses. Throw also shows the projectile leg so the two-asset
+# handoff is visible.
+func _draw_action_stage() -> void:
+	var k := 6.0                                    # stage scale vs game pixels
+	var feet := Vector2(action_stage.size.x * 0.42, action_stage.size.y * 0.80)
+	var tt: float = clampf(_act_t, 0.0, 1.0)
+	# Ground line.
+	action_stage.draw_line(feet + Vector2(-170, 16), feet + Vector2(240, 16),
+		Color(0.22, 0.14, 0.09, 0.55), 4.0, true)
+	if _action_type == "fish":
+		# Water hint to the right.
+		action_stage.draw_rect(Rect2(feet.x + 90, feet.y - 4, 170, 40),
+			Color(0.18, 0.46, 0.82, 0.75))
+		action_stage.draw_line(feet + Vector2(90, -4), feet + Vector2(260, -4),
+			Color(0.07, 0.16, 0.34), 3.0, true)
+	# Body (slight forward lean during the active beat).
+	var body: Texture2D = _act_tex.get("operator")
+	if body != null:
+		var bh := 78.0 * k * 0.7
+		var bw: float = bh * float(body.get_width()) / float(body.get_height())
+		var lean: float = 0.0
+		if _act_t >= 0.0 and _action_type in ["dig", "swing", "throw"]:
+			lean = sin(clampf(tt / 0.6, 0.0, 1.0) * PI) * 10.0
+		action_stage.draw_texture_rect(body,
+			Rect2(feet.x - bw * 0.5 + lean, feet.y - bh, bw, bh), false)
+	# Spade prop via the shared pose math.
+	var spade: Texture2D = _act_tex.get("spade")
+	if spade != null:
+		var pose: Variant
+		if _act_t < 0.0:
+			pose = {"off": Vector2(10.0, -12.0), "rot": -0.30, "flip": false}
+		else:
+			pose = SpadeActions.prop_pose(_action_type, tt, Vector2.RIGHT)
+		if pose != null:
+			var w: float = 17.0 * k
+			var h: float = w * float(spade.get_height()) / float(spade.get_width())
+			action_stage.draw_set_transform(feet + pose["off"] * k, float(pose["rot"]), Vector2.ONE)
+			action_stage.draw_texture_rect(spade, Rect2(-w * 0.5, -h * 0.58, w, h), false)
+			action_stage.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# Throw: the projectile leg after release.
+		var rel: float = SpadeActions.THROW_WINDUP / float(SpadeActions.DUR["throw"])
+		if _action_type == "throw" and _act_t >= rel:
+			var u: float = clampf((tt - rel) / (1.0 - rel), 0.0, 1.0)
+			var start: Vector2 = feet + Vector2(-9.0, -20.0) * k * 0.2
+			var endp: Vector2 = feet + Vector2(330.0, -40.0)
+			var pos: Vector2 = start.lerp(endp, u) + Vector2(0, -110.0 * sin(u * PI))
+			var w2 := 40.0
+			var h2: float = w2 * float(spade.get_height()) / float(spade.get_width())
+			action_stage.draw_set_transform(pos, u * TAU * 2.0, Vector2.ONE)
+			action_stage.draw_texture_rect(spade, Rect2(-w2 * 0.5, -h2 * 0.5, w2, h2), false)
+			action_stage.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _shot_and_quit(out_path: String) -> void:
 	await get_tree().create_timer(0.5).timeout
@@ -167,12 +241,19 @@ func _load_anim(i: int) -> void:
 	var a: Dictionary = ANIMATIONS[i]
 	_anim_name = String(a["name"])
 	_rig_mode = bool(a.get("rig", false))
+	_action_type = String(a.get("action", ""))
 	if rig_stage != null:
 		rig_stage.visible = _rig_mode
-	stage.visible = not _rig_mode
+	if action_stage != null:
+		action_stage.visible = _action_type != ""
+	stage.visible = not _rig_mode and _action_type == ""
 	if _rig_mode:
 		_rig_t = -0.3
 		info.text = "%s   |   %s" % [_anim_name, BallistaRig.phase_name(_rig_t)]
+		return
+	if _action_type != "":
+		_act_t = -0.25
+		info.text = "%s   |   %s" % [_anim_name, SpadeActions.phase_name(_action_type, _act_t)]
 		return
 	_frames.clear()
 	_labels.clear()
@@ -192,6 +273,14 @@ func _toggle_play() -> void:
 	play_btn.text = "Pause" if _playing else "Play"
 
 func _advance() -> void:
+	if _action_type != "":
+		_act_t += 0.04
+		if _act_t > 1.2:
+			_act_t = -0.25
+		action_stage.queue_redraw()
+		info.text = "%s   |   t=%.2f   |   %s" % [_anim_name, _act_t,
+			SpadeActions.phase_name(_action_type, _act_t)]
+		return
 	if _rig_mode:
 		_rig_t += 0.04
 		if _rig_t > 1.1:
@@ -215,6 +304,14 @@ func _show_frame() -> void:
 
 func _process(delta: float) -> void:
 	if not _playing:
+		return
+	if _action_type != "":
+		_act_t += delta * _speed / float(SpadeActions.DUR.get(_action_type, 0.6))
+		if _act_t > 1.35:
+			_act_t = -0.25
+		action_stage.queue_redraw()
+		info.text = "%s   |   t=%.2f   |   %s" % [_anim_name, _act_t,
+			SpadeActions.phase_name(_action_type, _act_t)]
 		return
 	if _rig_mode:
 		_rig_t += delta * _speed / BallistaRig.DUR

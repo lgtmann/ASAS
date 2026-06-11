@@ -754,8 +754,7 @@ var _unit_throw_pending: bool = false
 # dig plunges it, swing arcs it, throw winds up then hands off to the
 # projectile, fishing dangles it over the water.
 var _action_anims: Dictionary = {}
-const ACTION_DUR := {"dig": 0.7, "swing": 0.45, "throw": 0.5, "fish": 1.0}
-const THROW_WINDUP := 0.3              # projectile launches at this moment
+
 func _start_action(u, type: String, dir: Vector2) -> void:
 	_action_anims[u] = {"type": type, "t0": _anim_t,
 		"dir": dir.normalized() if dir.length() > 0.01 else Vector2.RIGHT}
@@ -1373,44 +1372,11 @@ func _spade_prop_pose(u, feet: Vector2) -> Variant:
 			return null
 		return {"pos": feet + Vector2(10.0, -12.0), "rot": -0.30, "flip": false}
 	var type: String = String(act["type"])
-	var t: float = clampf((_anim_t - float(act["t0"])) / float(ACTION_DUR.get(type, 0.6)), 0.0, 1.0)
-	var dir: Vector2 = act["dir"]
-	var side: float = 1.0 if dir.x >= 0.0 else -1.0
-	var flip: bool = side < 0.0
-	match type:
-		"dig":
-			if t < 0.35:
-				var k: float = t / 0.35
-				return {"pos": feet + Vector2(10.0 * side, -12.0 - 7.0 * k),
-					"rot": side * lerpf(-0.3, -1.1, k), "flip": flip}
-			elif t < 0.6:
-				var k2: float = (t - 0.35) / 0.25
-				return {"pos": feet + Vector2((10.0 + 11.0 * k2) * side, -19.0 + 19.0 * k2),
-					"rot": side * lerpf(-1.1, 1.25, k2), "flip": flip}
-			else:
-				var k3: float = (t - 0.6) / 0.4
-				return {"pos": feet + Vector2((21.0 - 11.0 * k3) * side, -k3 * 12.0),
-					"rot": side * lerpf(1.25, -0.3, k3), "flip": flip}
-		"swing":
-			if t < 0.6:
-				var k4: float = t / 0.6
-				return {"pos": feet + dir * 9.0 * k4 + Vector2(0, -14.0),
-					"rot": side * lerpf(-1.4, 1.2, k4 * k4), "flip": flip}
-			else:
-				var k5: float = (t - 0.6) / 0.4
-				return {"pos": feet + dir * 9.0 * (1.0 - k5) + Vector2(0, -14.0),
-					"rot": side * lerpf(1.2, -0.3, k5), "flip": flip}
-		"throw":
-			var rel: float = THROW_WINDUP / float(ACTION_DUR["throw"])
-			if t < rel:
-				var k6: float = t / rel
-				return {"pos": feet - dir * 9.0 * k6 + Vector2(0, -16.0 - 4.0 * k6),
-					"rot": side * lerpf(-0.3, -2.1, k6 * k6), "flip": flip}
-			return null      # released — the projectile carries it now
-		"fish":
-			return {"pos": feet + dir * 12.0 + Vector2(0, -10.0 + sin(t * TAU * 2.0) * 2.5),
-				"rot": side * 0.95, "flip": flip}
-	return null
+	var t: float = clampf((_anim_t - float(act["t0"])) / float(SpadeActions.DUR.get(type, 0.6)), 0.0, 1.0)
+	var pose: Variant = SpadeActions.prop_pose(type, t, act["dir"])
+	if pose == null:
+		return null
+	return {"pos": feet + pose["off"], "rot": pose["rot"], "flip": pose["flip"]}
 
 func _draw_spade_prop(u, feet: Vector2, alpha: float) -> void:
 	var pose: Variant = _spade_prop_pose(u, feet)
@@ -1449,7 +1415,7 @@ func _on_spade_thrown(from_g: Vector3i, to_g: Vector3i, boomerang: bool) -> void
 		t0 = -BALLISTA_LAUNCH_DELAY / THROW_DUR
 	elif _unit_throw_pending:
 		_unit_throw_pending = false
-		t0 = -THROW_WINDUP / THROW_DUR
+		t0 = -SpadeActions.THROW_WINDUP / THROW_DUR
 	projectiles.append({
 		"from": from_pos,
 		"to": to_pos,
@@ -1525,7 +1491,7 @@ func _process(delta: float) -> void:
 	_dying = _dying.filter(func(g): return _anim_t - float(g["t0"]) < DEATH_DUR)
 	for u in _action_anims.keys():
 		var act: Dictionary = _action_anims[u]
-		if _anim_t - float(act["t0"]) > float(ACTION_DUR.get(act["type"], 0.6)):
+		if _anim_t - float(act["t0"]) > float(SpadeActions.DUR.get(act["type"], 0.6)):
 			_action_anims.erase(u)
 	_dmg_numbers = _dmg_numbers.filter(func(d): return _anim_t - float(d["t0"]) < DMG_DUR)
 	# Ambient animation = continuous redraw. Terrain stays cached, so the
