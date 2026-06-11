@@ -260,6 +260,9 @@ func _ready() -> void:
 	gs.unit_died.connect(_on_unit_died)
 	gs.terrain_hit.connect(_on_terrain_hit)
 	gs.ballista_fired.connect(_on_ballista_fired)
+	gs.unit_dug.connect(_on_unit_action.bind("dig"))
+	gs.unit_threw.connect(_on_unit_threw)
+	gs.unit_fished.connect(func(u): _start_action(u, "fish", Vector2.RIGHT))
 
 	# Stand up the terrain cache layer AFTER world is ready and before _build_hud.
 	terrain_layer = TerrainLayer.new()
@@ -729,6 +732,8 @@ func _on_unit_attacked(attacker, target_grid: Vector3i) -> void:
 	var d: Vector2 = to - from
 	_lunges[attacker] = {"dir": d.normalized() if d.length() > 0.5 else Vector2.RIGHT,
 			"t0": _anim_t}
+	if attacker.spade != null:
+		_start_action(attacker, "swing", d)
 
 func _on_unit_damaged(u, amount: int) -> void:
 	_hit_flash[u] = _anim_t
@@ -743,6 +748,27 @@ func _on_unit_died(u, _grid: Vector3i) -> void:
 		"feet": iso_pt(u.draw_pos.x, u.draw_pos.y, u.draw_pos.z), "t0": _anim_t})
 
 var _ballista_shot_pending: bool = false
+var _unit_throw_pending: bool = false
+# Operator action animations: unit -> {type, t0, dir}. The held spade is a
+# separate PROP sprite posed over the unit (the ballista two-asset pattern):
+# dig plunges it, swing arcs it, throw winds up then hands off to the
+# projectile, fishing dangles it over the water.
+var _action_anims: Dictionary = {}
+const ACTION_DUR := {"dig": 0.7, "swing": 0.45, "throw": 0.5, "fish": 1.0}
+const THROW_WINDUP := 0.3              # projectile launches at this moment
+func _start_action(u, type: String, dir: Vector2) -> void:
+	_action_anims[u] = {"type": type, "t0": _anim_t,
+		"dir": dir.normalized() if dir.length() > 0.01 else Vector2.RIGHT}
+
+func _on_unit_action(u, cell: Vector3i, type: String) -> void:
+	var from: Vector2 = iso_pt(u.draw_pos.x, u.draw_pos.y, u.draw_pos.z)
+	var to: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y), float(cell.z) + 0.5)
+	_start_action(u, type, to - from)
+
+func _on_unit_threw(u, cell: Vector3i) -> void:
+	_on_unit_action(u, cell, "throw")
+	_unit_throw_pending = true     # the next spade_thrown waits out the windup
+
 func _on_ballista_fired(cell: Vector3i) -> void:
 	if not _ballista_rig_tex.is_empty():
 		_ballista_anims[cell] = _anim_t
@@ -1293,6 +1319,7 @@ func _draw_unit(u, alpha: float) -> void:
 		body_top = feet - Vector2(0, uh * 0.8)   # badges anchor above the sprite
 	else:
 		_draw_capsule(feet, body_top, body_w, col)
+	_draw_spade_prop(u, feet, alpha)
 
 	# Crown for the leader (distinct silhouette).
 	if u.kind == "leader":
@@ -1336,6 +1363,69 @@ func _draw_unit(u, alpha: float) -> void:
 		draw_rect(Rect2(badge_pos - Vector2(2, 2), Vector2(28, 14)), Color(0, 0, 0, 0.6))
 		draw_string(font, badge_pos + Vector2(0, 10), "L%d" % u.grid.y, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, badge_col)
 
+# Held-spade prop: a separate sprite posed over the unit (two-asset pattern).
+# Visible whenever a spade-wielder holds one; animated through dig / swing /
+# throw / fish; vanishes at the throw release as the projectile takes over.
+func _spade_prop_pose(u, feet: Vector2) -> Variant:
+	var act = _action_anims.get(u)
+	if act == null:
+		if u.spade == null or u.kind in ["leader", "javelin", "plow", "boat", "wolf", "wizard", "king", "otter"]:
+			return null
+		return {"pos": feet + Vector2(10.0, -12.0), "rot": -0.30, "flip": false}
+	var type: String = String(act["type"])
+	var t: float = clampf((_anim_t - float(act["t0"])) / float(ACTION_DUR.get(type, 0.6)), 0.0, 1.0)
+	var dir: Vector2 = act["dir"]
+	var side: float = 1.0 if dir.x >= 0.0 else -1.0
+	var flip: bool = side < 0.0
+	match type:
+		"dig":
+			if t < 0.35:
+				var k: float = t / 0.35
+				return {"pos": feet + Vector2(10.0 * side, -12.0 - 7.0 * k),
+					"rot": side * lerpf(-0.3, -1.1, k), "flip": flip}
+			elif t < 0.6:
+				var k2: float = (t - 0.35) / 0.25
+				return {"pos": feet + Vector2((10.0 + 11.0 * k2) * side, -19.0 + 19.0 * k2),
+					"rot": side * lerpf(-1.1, 1.25, k2), "flip": flip}
+			else:
+				var k3: float = (t - 0.6) / 0.4
+				return {"pos": feet + Vector2((21.0 - 11.0 * k3) * side, -k3 * 12.0),
+					"rot": side * lerpf(1.25, -0.3, k3), "flip": flip}
+		"swing":
+			if t < 0.6:
+				var k4: float = t / 0.6
+				return {"pos": feet + dir * 9.0 * k4 + Vector2(0, -14.0),
+					"rot": side * lerpf(-1.4, 1.2, k4 * k4), "flip": flip}
+			else:
+				var k5: float = (t - 0.6) / 0.4
+				return {"pos": feet + dir * 9.0 * (1.0 - k5) + Vector2(0, -14.0),
+					"rot": side * lerpf(1.2, -0.3, k5), "flip": flip}
+		"throw":
+			var rel: float = THROW_WINDUP / float(ACTION_DUR["throw"])
+			if t < rel:
+				var k6: float = t / rel
+				return {"pos": feet - dir * 9.0 * k6 + Vector2(0, -16.0 - 4.0 * k6),
+					"rot": side * lerpf(-0.3, -2.1, k6 * k6), "flip": flip}
+			return null      # released — the projectile carries it now
+		"fish":
+			return {"pos": feet + dir * 12.0 + Vector2(0, -10.0 + sin(t * TAU * 2.0) * 2.5),
+				"rot": side * 0.95, "flip": flip}
+	return null
+
+func _draw_spade_prop(u, feet: Vector2, alpha: float) -> void:
+	var pose: Variant = _spade_prop_pose(u, feet)
+	if pose == null:
+		return
+	var tex: Texture2D = _texture_for("spade")
+	if tex == null:
+		return
+	var w := 17.0
+	var h: float = w * float(tex.get_height()) / float(tex.get_width())
+	var sc := Vector2(-1.0, 1.0) if pose["flip"] else Vector2.ONE
+	draw_set_transform(pose["pos"], float(pose["rot"]), sc)
+	draw_texture_rect(tex, Rect2(-w * 0.5, -h * 0.58, w, h), false, Color(1, 1, 1, alpha))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw_capsule(feet: Vector2, top: Vector2, width: float, col: Color) -> void:
 	var mid_y := (feet.y + top.y) * 0.5
 	# Rectangle body + two end-caps approximated with circles.
@@ -1357,6 +1447,9 @@ func _on_spade_thrown(from_g: Vector3i, to_g: Vector3i, boomerang: bool) -> void
 	if _ballista_shot_pending:
 		_ballista_shot_pending = false
 		t0 = -BALLISTA_LAUNCH_DELAY / THROW_DUR
+	elif _unit_throw_pending:
+		_unit_throw_pending = false
+		t0 = -THROW_WINDUP / THROW_DUR
 	projectiles.append({
 		"from": from_pos,
 		"to": to_pos,
@@ -1430,6 +1523,10 @@ func _process(delta: float) -> void:
 		if _anim_t - float(_lunges[u]["t0"]) > LUNGE_DUR:
 			_lunges.erase(u)
 	_dying = _dying.filter(func(g): return _anim_t - float(g["t0"]) < DEATH_DUR)
+	for u in _action_anims.keys():
+		var act: Dictionary = _action_anims[u]
+		if _anim_t - float(act["t0"]) > float(ACTION_DUR.get(act["type"], 0.6)):
+			_action_anims.erase(u)
 	_dmg_numbers = _dmg_numbers.filter(func(d): return _anim_t - float(d["t0"]) < DMG_DUR)
 	# Ambient animation = continuous redraw. Terrain stays cached, so the
 	# per-frame cost is only units + fx + HUD overlays.

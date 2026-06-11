@@ -19,6 +19,9 @@ signal unit_damaged(unit, amount)            # any damage — hit flash + number
 signal unit_died(unit, grid)                 # death — tip-over ghost animation
 signal terrain_hit(cell, mat)                # dig/chop/smash — particle burst
 signal ballista_fired(cell)                  # sprite fire animation
+signal unit_dug(unit, cell)                  # dig action — spade plunge anim
+signal unit_threw(unit, cell)                # throw windup — projectile delays
+signal unit_fished(unit)                     # fishing bob anim
 
 const MAX_ENERGY := 6                  # leader's combo budget per turn
 const HAND_SIZE := 5
@@ -1333,6 +1336,7 @@ func fish(u) -> void:
 		return
 	if not _consume_action(u):
 		return
+	unit_fished.emit(u)
 	hand.append(_make_food_card(_count_buildings(TEAM_PLAYER, "campsite") > 0))
 	cards_drawn.emit(1)
 	notice.emit("Caught something — food card added.")
@@ -2140,6 +2144,7 @@ func dig_at(u, cell: Vector3i) -> void:
 		return
 	if not _consume_action(u):
 		return
+	unit_dug.emit(u, cell)
 	var rewards: Array = []
 	# Remember where the unit started so we can animate any descent at the end.
 	var dig_from: Vector3i = u.grid
@@ -2274,6 +2279,7 @@ func swing_at(u, cell: Vector3i) -> void:
 			return
 		if not _consume_action(u):
 			return
+		unit_attacked.emit(u, cell)
 		# Pick adds wall damage, but walls don't have HP yet — note for later.
 		var m: int = world.dig_cell(cell)
 		if m == VoxelWorld.Mat.TREE:
@@ -2306,6 +2312,7 @@ func throw_at(u, cell: Vector3i) -> void:
 		return
 	if not _consume_action(u):
 		return
+	unit_threw.emit(u, cell)
 	_face_toward(u, cell)
 	var s = u.spade
 	var dmg: int = s.swing_dmg + (1 if u.strength else 0)
