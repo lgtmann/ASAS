@@ -120,6 +120,26 @@
   {
    "name": "building_barracks",
    "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a squat cartoon barracks: low stone-walled building with timber upper floor, a heavy round-arch door, a small crimson banner hanging from a pole, a weapon rack with two training swords beside the entrance, cool stone greys with warm timber and crimson accents, two flat cel tones per surface, thick dark outlines. Square 1:1 composition, building centered, filling about 75% of the frame."
+  },
+  {
+   "name": "icon_wood",
+   "prompt": "Small flat game UI icon, centered, filling about 60% of the frame, bold and readable at 32x32 pixels. Subject: three stacked cartoon logs in warm honey browns with pale cut ends showing simple ring circles, two flat cel tones, thick dark outlines. Square 1:1 composition."
+  },
+  {
+   "name": "icon_earth",
+   "prompt": "Small flat game UI icon, centered, filling about 60% of the frame, bold and readable at 32x32 pixels. Subject: a small rounded mound of brown soil with two tiny pebbles, two flat cel tones, thick dark outline. Square 1:1 composition."
+  },
+  {
+   "name": "icon_stone",
+   "prompt": "Small flat game UI icon, centered, filling about 60% of the frame, bold and readable at 32x32 pixels. Subject: a single chunky grey stone block with one chipped corner, two flat cel tones, thick dark outline. Square 1:1 composition."
+  },
+  {
+   "name": "icon_oil",
+   "prompt": "Small flat game UI icon, centered, filling about 60% of the frame, bold and readable at 32x32 pixels. Subject: a small wooden barrel with dark iron bands and a single black oil drop above it, two flat cel tones, thick dark outlines. Square 1:1 composition."
+  },
+  {
+   "name": "icon_hammer",
+   "prompt": "Small flat game UI icon, centered, filling about 60% of the frame, bold and readable at 32x32 pixels. Subject: a sturdy cartoon claw hammer held diagonally, warm wooden handle and steel head, two flat cel tones, thick dark outlines. Square 1:1 composition."
   }
  ]
 }

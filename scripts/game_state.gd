@@ -207,11 +207,8 @@ func _spawn_enemy_force() -> void:
 			elif kind == "javelin" and m.spade != null:
 				m.spade.handle = "spade_boomerang"
 		return
-	# Intro area (area 1).
-	var el = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
-	el.kind = "leader"
-	el.hp = 8
-	el.max_hp = el.hp
+	# Intro area (area 1): just two spaded operators — no enemy leader, so the
+	# first fight teaches the basics without a boss to crack.
 	_spawn_unit(TEAM_ENEMY, _free_spot_near(3, 2), true)
 	_spawn_unit(TEAM_ENEMY, _free_spot_near(2, 3), true)
 

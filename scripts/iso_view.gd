@@ -179,7 +179,8 @@ var discard_pile_panel: Panel
 var discard_pile_label: Label
 var sim_btn: Button
 var restart_btn: Button
-var build_buttons: Dictionary = {}     # blueprint id -> Button (Build Bar)
+var _res_labels: Dictionary = {}       # resource kind -> count Label (sidebar)
+var build_modal_btn: Button
 var _modal: Panel = null               # active modal (choice / harvest confirm)
 var context_buttons: Array = []
 var _pending_anim_count: int = 0       # newly-drawn cards to slide in
@@ -1804,30 +1805,42 @@ func _build_hud() -> void:
 	restart_btn.pressed.connect(func(): get_tree().reload_current_scene())
 	hud.add_child(restart_btn)
 
-	# Draw + discard pile panels framing the hand row.
-	draw_pile_panel = _pile_panel(Vector2(40, HAND_Y + 70))
-	draw_pile_label = _pile_label(draw_pile_panel, "Draw")
-	discard_pile_panel = _pile_panel(Vector2(1470, HAND_Y + 70))
-	discard_pile_label = _pile_label(discard_pile_panel, "Discard")
+	# --- Right sidebar: resource bank, build button, deck piles ---
+	var side_x := 1492.0
+	var res_kinds := ["wood", "earth", "stone", "oil"]
+	for ri in res_kinds.size():
+		var kind: String = res_kinds[ri]
+		var row_y: float = 150.0 + ri * 36.0
+		var icon_path: String = "res://assets/cards/icon_%s.png" % kind
+		if ResourceLoader.exists(icon_path):
+			var tr := TextureRect.new()
+			tr.texture = load(icon_path)
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tr.position = Vector2(side_x, row_y)
+			tr.size = Vector2(30, 30)
+			hud.add_child(tr)
+		var rl := _label(Vector2(side_x + 36.0, row_y + 4.0))
+		rl.add_theme_font_size_override("font_size", 17)
+		rl.text = "0"
+		_res_labels[kind] = rl
 
-	# Build Bar — two-column blueprint grid on the right edge, below the level
-	# controls. Buy with banked wood/oil; bought cards go straight to hand.
-	var bb_label := _label(Vector2(1370, 150))
-	bb_label.text = "Build Bar (w=wood o=oil)"
-	var col_w := 110.0
-	var row_h := 26.0
-	var i := 0
-	for bp in GameState.BLUEPRINTS:
-		var id: String = String(bp["id"])
-		var b := Button.new()
-		b.text = "%s %s" % [gs.blueprint_card_title(id), _bp_cost_label(bp)]
-		b.add_theme_font_size_override("font_size", 10)
-		b.position = Vector2(1370 + (i % 2) * (col_w + 4), 172 + float(i / 2) * row_h)
-		b.size = Vector2(col_w, row_h - 3)
-		b.pressed.connect(func(): gs.buy_blueprint(id))
-		hud.add_child(b)
-		build_buttons[id] = b
-		i += 1
+	build_modal_btn = Button.new()
+	var hammer_path := "res://assets/cards/icon_hammer.png"
+	if ResourceLoader.exists(hammer_path):
+		build_modal_btn.icon = load(hammer_path)
+		build_modal_btn.expand_icon = true
+	build_modal_btn.text = "Build"
+	build_modal_btn.position = Vector2(side_x, 302.0)
+	build_modal_btn.size = Vector2(96, 52)
+	build_modal_btn.pressed.connect(_open_build_modal)
+	hud.add_child(build_modal_btn)
+
+	# Deck piles live in the sidebar below the build button.
+	draw_pile_panel = _pile_panel(Vector2(side_x, 372.0))
+	draw_pile_label = _pile_label(draw_pile_panel, "Draw")
+	discard_pile_panel = _pile_panel(Vector2(side_x, 496.0))
+	discard_pile_label = _pile_label(discard_pile_panel, "Discard")
 
 	# Ball overlay sits on top of every HUD element for the combo animation.
 	ball_overlay = BallOverlay.new()
@@ -1970,6 +1983,92 @@ func _advance_area(direction: String) -> void:
 		_select(leader)
 		_center_on(leader.grid)
 
+# Art for a blueprint tile: structures use their placed art, buildings their
+# building sprite, the boat its unit sprite, dirt walls the earth card.
+func _blueprint_art(id: String) -> Texture2D:
+	var candidates := []
+	if id == "boat":
+		candidates = ["res://assets/cards/unit_boat.png"]
+	elif id == "dirt_wall":
+		candidates = ["res://assets/cards/raw/earth.png", "res://assets/cards/earth.png"]
+	else:
+		candidates = ["res://assets/cards/building_%s.png" % id,
+				"res://assets/cards/%s.png" % id]
+	for c in candidates:
+		if ResourceLoader.exists(c):
+			return load(c)
+	return null
+
+# The hammer menu: every blueprint as an illustrated tile. Buying puts the
+# card straight in your hand (same rules as before); the modal stays open so
+# you can keep shopping, refreshing affordability each purchase.
+func _open_build_modal() -> void:
+	var bps: Array = GameState.BLUEPRINTS
+	var cols := 5
+	var rows: int = int(ceil(float(bps.size()) / float(cols)))
+	var tile_w := 142.0
+	var tile_h := 148.0
+	var panel := _make_modal(70.0 + rows * tile_h)
+	panel.size = Vector2(40.0 + cols * tile_w, 70.0 + rows * tile_h)
+	panel.position = Vector2((1600.0 - panel.size.x) * 0.5, 90.0)
+	var title := Label.new()
+	title.text = "Build — materials in bank"
+	title.add_theme_font_size_override("font_size", 18)
+	title.position = Vector2(20, 14)
+	panel.add_child(title)
+	var closer := Button.new()
+	closer.text = "X"
+	closer.position = Vector2(panel.size.x - 46, 10)
+	closer.size = Vector2(36, 30)
+	closer.pressed.connect(_close_modal)
+	panel.add_child(closer)
+	for i in bps.size():
+		var bp: Dictionary = bps[i]
+		var id: String = String(bp["id"])
+		var tx: float = 20.0 + (i % cols) * tile_w
+		var ty: float = 54.0 + float(i / cols) * tile_h
+		var affordable: bool = gs.can_afford_blueprint(bp) \
+				and gs.active_team == GameState.TEAM_PLAYER and not gs.is_over
+		var tile := Panel.new()
+		tile.position = Vector2(tx, ty)
+		tile.size = Vector2(tile_w - 10.0, tile_h - 10.0)
+		tile.modulate = Color(1, 1, 1) if affordable else Color(0.55, 0.55, 0.55)
+		panel.add_child(tile)
+		var art: Texture2D = _blueprint_art(id)
+		if art != null:
+			var tr := TextureRect.new()
+			tr.texture = art
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tr.position = Vector2(8, 6)
+			tr.size = Vector2(tile_w - 26.0, 84.0)
+			tile.add_child(tr)
+		var nm := Label.new()
+		nm.text = gs.blueprint_card_title(id)
+		nm.add_theme_font_size_override("font_size", 12)
+		nm.position = Vector2(8, 94)
+		nm.size = Vector2(tile_w - 26.0, 18)
+		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tile.add_child(nm)
+		var cost := Label.new()
+		cost.text = _bp_cost_label(bp)
+		cost.add_theme_font_size_override("font_size", 12)
+		cost.add_theme_color_override("font_color",
+				Color(0.55, 0.95, 0.55) if affordable else Color(0.95, 0.55, 0.45))
+		cost.position = Vector2(8, 112)
+		cost.size = Vector2(tile_w - 26.0, 18)
+		cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tile.add_child(cost)
+		var hit := Button.new()
+		hit.flat = true
+		hit.position = Vector2.ZERO
+		hit.size = tile.size
+		hit.disabled = not affordable
+		hit.pressed.connect(func():
+			if gs.buy_blueprint(id):
+				_open_build_modal())
+		tile.add_child(hit)
+
 # Confirm dialog for a distant-tree harvest task.
 func _open_harvest_confirm(u, tree_cell: Vector3i) -> void:
 	var turns: int = gs.harvest_turns(u, tree_cell)
@@ -2040,6 +2139,27 @@ func _on_discard_selected() -> void:
 	if _ai_running or _combo_animating or selected_cards.is_empty():
 		return
 	var to_discard: Array = selected_cards.duplicate()
+	# Fly ghost copies into the discard pile before the hand refreshes.
+	var target: Vector2 = discard_pile_panel.position + discard_pile_panel.size * 0.5
+	var gi := 0
+	for c in to_discard:
+		for b in context_buttons:
+			if b.has_meta("card") and b.get_meta("card") == c:
+				var ghost: Button = b.duplicate()
+				ghost.position = b.position
+				ghost.rotation_degrees = b.rotation_degrees
+				ghost.pivot_offset = ghost.size * 0.5
+				hud.add_child(ghost)
+				var tw := create_tween().set_parallel(true)
+				var dl: float = gi * 0.05
+				tw.tween_property(ghost, "position", target - ghost.size * 0.5 * 0.3, 0.32) \
+					.set_delay(dl).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+				tw.tween_property(ghost, "scale", Vector2(0.3, 0.3), 0.32).set_delay(dl)
+				tw.tween_property(ghost, "rotation_degrees", 35.0, 0.32).set_delay(dl)
+				tw.tween_property(ghost, "modulate", Color(1, 1, 1, 0.2), 0.32).set_delay(dl)
+				tw.chain().tween_callback(ghost.queue_free)
+				gi += 1
+				break
 	selected_cards.clear()
 	gs.discard_cards(to_discard)
 
@@ -2125,22 +2245,18 @@ func _refresh_info() -> void:
 		var held := "spade" if u.spade != null else "no spade"
 		who = "%s  HP %d/%d  (%s)" % [u.kind, u.hp, u.max_hp, held]
 	var team_label := "PLAYER" if gs.active_team == GameState.TEAM_PLAYER else "ENEMY"
-	info_label.text = "Turn %d   %s   Energy %d/%d   Wood %d   Earth %d   Stone %d   Oil %d   Selected: %s   [mode: %s]" % \
+	info_label.text = "Turn %d   %s   Energy %d/%d   Selected: %s   [mode: %s]" % \
 		[gs.turn, team_label, gs.energy, GameState.MAX_ENERGY,
-			int(gs.wood[GameState.TEAM_PLAYER]),
-			int(gs.earth[GameState.TEAM_PLAYER]),
-			int(gs.stone[GameState.TEAM_PLAYER]),
-			int(gs.oil[GameState.TEAM_PLAYER]),
 			who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
 		end_turn_btn.disabled = gs.is_over or _ai_running or gs.active_team != GameState.TEAM_PLAYER
-	# Build Bar affordability: grey out blueprints you can't pay for yet.
-	for bp in GameState.BLUEPRINTS:
-		var btn: Button = build_buttons.get(String(bp["id"]))
-		if btn != null:
-			btn.disabled = gs.is_over or _ai_running \
-					or gs.active_team != GameState.TEAM_PLAYER \
-					or not gs.can_afford_blueprint(bp)
+	# Sidebar resource counts.
+	for kind in _res_labels:
+		var bank: Array = gs.get(kind)
+		_res_labels[kind].text = str(int(bank[GameState.TEAM_PLAYER]))
+	if build_modal_btn != null:
+		build_modal_btn.disabled = gs.is_over or _ai_running \
+				or gs.active_team != GameState.TEAM_PLAYER
 
 func _refresh_context() -> void:
 	# Don't blow away the buttons mid-animation — the combo animation owns them
@@ -2171,14 +2287,25 @@ func _refresh_context() -> void:
 		var first_anim_idx: int = n - anim_count
 		_pending_anim_count = 0           # consume so reruns don't repeat
 		var i := 0
+		var centre_i: float = (float(n) - 1.0) * 0.5
 		for card in gs.hand:
-			var slot_y: float = HAND_Y - (28.0 if selected_cards.has(card) else 0.0)
+			# Fanned hand: slight per-card rotation + arc so it reads like
+			# held cards rather than a toolbar.
+			var off: float = float(i) - centre_i
+			var fan_rot: float = off * 1.6
+			var arc_y: float = pow(absf(off), 1.7) * 2.4
+			var slot_y: float = HAND_Y + arc_y - (30.0 if selected_cards.has(card) else 0.0)
 			var b := _make_card_button(card, card_x, slot_y, _on_card.bind(card))
 			b.set_meta("card", card)
+			b.pivot_offset = b.size * 0.5
+			b.rotation_degrees = fan_rot
 			if selected_cards.has(card):
 				b.modulate = Color(1.18, 1.18, 1.00)
+				b.rotation_degrees = 0.0
 			hud.add_child(b)
 			context_buttons.append(b)
+			_attach_card_hover(b, Vector2(card_x, slot_y), fan_rot,
+					selected_cards.has(card))
 			if i >= first_anim_idx and anim_count > 0:
 				_animate_card_in(b, Vector2(card_x, slot_y), i - first_anim_idx)
 			card_x += step
@@ -2284,15 +2411,47 @@ func _set_ball_arc(t: float, from_p: Vector2, to_p: Vector2) -> void:
 	ball_overlay.queue_redraw()
 
 # Slide a freshly-drawn card from the draw pile into its hand slot, fading in.
+# Hover: card lifts, straightens, and grows slightly; settles back on exit.
+func _attach_card_hover(b: Button, base_pos: Vector2, base_rot: float, is_selected: bool) -> void:
+	if is_selected:
+		return        # selected cards already sit raised
+	b.mouse_entered.connect(func():
+		if not is_instance_valid(b):
+			return
+		var tw := b.create_tween().set_parallel(true)
+		tw.tween_property(b, "position:y", base_pos.y - 26.0, 0.12) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tw.tween_property(b, "scale", Vector2(1.07, 1.07), 0.12)
+		tw.tween_property(b, "rotation_degrees", 0.0, 0.12))
+	b.mouse_exited.connect(func():
+		if not is_instance_valid(b):
+			return
+		var tw := b.create_tween().set_parallel(true)
+		tw.tween_property(b, "position:y", base_pos.y, 0.16) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tw.tween_property(b, "scale", Vector2.ONE, 0.16)
+		tw.tween_property(b, "rotation_degrees", base_rot, 0.16))
+
+# Draw-in: cards fly from the sidebar draw pile with a back-eased pop —
+# spinning up from small, staggered per card.
 func _animate_card_in(card_btn: Button, target_pos: Vector2, anim_index: int) -> void:
-	var pile_pos := Vector2(40 + 44 - CARD_W * 0.5, HAND_Y + 70 + 55 - CARD_H * 0.5)
+	var pile_pos: Vector2 = draw_pile_panel.position + draw_pile_panel.size * 0.5 \
+			- Vector2(CARD_W * 0.5, CARD_H * 0.5)
 	card_btn.position = pile_pos
 	card_btn.modulate = Color(1, 1, 1, 0)
+	card_btn.pivot_offset = card_btn.size * 0.5
+	var end_rot: float = card_btn.rotation_degrees
+	card_btn.rotation_degrees = -24.0
+	card_btn.scale = Vector2(0.55, 0.55)
 	var tween := create_tween().set_parallel(true)
-	var delay: float = anim_index * 0.07
-	tween.tween_property(card_btn, "position", target_pos, 0.30) \
+	var delay: float = anim_index * 0.08
+	tween.tween_property(card_btn, "position", target_pos, 0.38) \
+		.set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(card_btn, "modulate", Color.WHITE, 0.22).set_delay(delay)
+	tween.tween_property(card_btn, "rotation_degrees", end_rot, 0.38) \
 		.set_delay(delay).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(card_btn, "modulate", Color.WHITE, 0.30).set_delay(delay)
+	tween.tween_property(card_btn, "scale", Vector2.ONE, 0.38) \
+		.set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _refresh_pile_counts() -> void:
 	if draw_pile_label != null:
