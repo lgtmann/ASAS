@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dm80x8d5irgon"
-path="res://.godot/imported/water.png-aa5d03e52cddd5edb1ae7911b6347817.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/water.png"
-dest_files=["res://.godot/imported/water.png-aa5d03e52cddd5edb1ae7911b6347817.ctex"]
 
 [params]
 

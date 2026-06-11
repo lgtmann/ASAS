@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c322vp5uph6hn"
-path="res://.godot/imported/tree_2.png-81cd6e88aceefb840b164f26ebbc5461.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/tree_2.png"
-dest_files=["res://.godot/imported/tree_2.png-81cd6e88aceefb840b164f26ebbc5461.ctex"]
 
 [params]
 

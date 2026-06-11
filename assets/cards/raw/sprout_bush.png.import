@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://micg3heijnso"
-path="res://.godot/imported/sprout_bush.png-5bb41f52d6ccee9081a04da40b4ae4fa.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/sprout_bush.png"
-dest_files=["res://.godot/imported/sprout_bush.png-5bb41f52d6ccee9081a04da40b4ae4fa.ctex"]
 
 [params]
 

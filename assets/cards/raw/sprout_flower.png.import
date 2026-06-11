@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hmo2ax8oaout"
-path="res://.godot/imported/sprout_flower.png-47eab5c2a56d7f83560d152839b991ae.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/sprout_flower.png"
-dest_files=["res://.godot/imported/sprout_flower.png-47eab5c2a56d7f83560d152839b991ae.ctex"]
 
 [params]
 

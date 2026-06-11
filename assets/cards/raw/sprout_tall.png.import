@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bj4fhpok7curt"
-path="res://.godot/imported/sprout_tall.png-caa69e1aef3e30658264e5a202a14a49.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/sprout_tall.png"
-dest_files=["res://.godot/imported/sprout_tall.png-caa69e1aef3e30658264e5a202a14a49.ctex"]
 
 [params]
 

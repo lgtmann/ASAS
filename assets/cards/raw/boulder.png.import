@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bfjgu8dr8lh1v"
-path="res://.godot/imported/boulder.png-e7b7d57ea8afa260e1c8798baca8b895.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cards/raw/boulder.png"
-dest_files=["res://.godot/imported/boulder.png-e7b7d57ea8afa260e1c8798baca8b895.ctex"]
 
 [params]
 
