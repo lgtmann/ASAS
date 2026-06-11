@@ -123,6 +123,23 @@ var _sub_draw_order: Array = []                # filled in _ready
 
 # Filled in _ready (enum values aren't constexpr for a const dict).
 var _mat_colors := {}
+# Optional sprite override per material — when present, full cells render as
+# the texture (matched to iso angle) instead of three flat polygons. Keyed
+# by VoxelWorld.Mat id; loaded on startup from res://assets/terrain/.
+var _terrain_sprites: Dictionary = {}
+# Trees render as ONE tall sprite per column anchored at the bottom cell — the
+# segmented (base/trunk/canopy) approach made the trunk widths fight. Variants
+# are chosen by hash so each tree column always picks the same look.
+var _tree_variants: Array = []
+# Small decoration sprites scattered deterministically on grass cells.
+var _sprout_variants: Array = []
+# Unit body art keyed by kind — auto-loaded from assets/cards/unit_<kind>.png.
+# Missing kinds fall back to the capsule renderer.
+var _unit_sprites: Dictionary = {}
+const UNIT_SPRITE_SCALE := 0.85     # sprite width relative to TILE_W
+const UNIT_GROUND_FRAC := 0.94      # vertical anchor: feet at this image fraction
+const UNIT_KINDS := ["operator", "leader", "warrior", "javelin", "plow",
+		"wolf", "wizard", "king", "otter", "boat"]
 
 var hud: CanvasLayer
 var info_label: Label
@@ -187,6 +204,7 @@ func _ready() -> void:
 	_sub_draw_order = _compute_sub_draw_order()
 
 	_mat_colors[VoxelWorld.Mat.EARTH] = Color(0.55, 0.40, 0.26)
+	_load_terrain_sprites()
 	_mat_colors[VoxelWorld.Mat.GOLD] = Color(0.96, 0.78, 0.20)
 	_mat_colors[VoxelWorld.Mat.WATER] = Color(0.28, 0.55, 0.85)
 	_mat_colors[VoxelWorld.Mat.CRYSTAL] = Color(0.45, 0.78, 1.00)
@@ -225,11 +243,261 @@ func _ready() -> void:
 	if gs.selected != null:
 		_center_on(gs.selected.grid)
 	queue_redraw()
+	_maybe_spawn_showcase()
+	_maybe_screenshot_and_quit()
+
+# `--showcase` spawns one unit of every kind near the player base (alternating
+# teams) so a single screenshot shows all unit art — the art pipeline's judge
+# looks at this to verify sprites landed correctly.
+func _maybe_spawn_showcase() -> void:
+	if not ("--showcase" in OS.get_cmdline_user_args()):
+		return
+	var lead = gs.selected
+	if lead == null:
+		return
+	for i in UNIT_KINDS.size():
+		var kind: String = UNIT_KINDS[i]
+		var spot: Vector3i = gs._free_spot_near(
+			lead.grid.x - 4 + (i % 5) * 2, lead.grid.z - 4 + (i / 5) * 2)
+		var u = gs._spawn_unit(i % 2, spot, kind in ["operator", "warrior", "javelin"])
+		u.kind = kind
+	gs.recompute_vision()
+	queue_redraw()
+
+# Art-pipeline harness: `godot --path . -- --screenshot=/tmp/shot.png
+# [--seed=42] [--focus=x,z] [--shot-zoom=1.5]` boots the game, waits for the
+# terrain + sprites to render, saves the viewport to PNG, and exits. Lets the
+# asset loop verify its own work without screen-recording permissions.
+func _maybe_screenshot_and_quit() -> void:
+	var out_path := ""
+	var focus := Vector2i(-1, -1)
+	var shot_zoom := 0.0
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--screenshot="):
+			out_path = arg.trim_prefix("--screenshot=")
+		elif arg.begins_with("--focus="):
+			var parts: PackedStringArray = arg.trim_prefix("--focus=").split(",")
+			if parts.size() == 2:
+				focus = Vector2i(int(parts[0]), int(parts[1]))
+		elif arg.begins_with("--shot-zoom="):
+			shot_zoom = float(arg.trim_prefix("--shot-zoom="))
+	if out_path == "":
+		return
+	if shot_zoom > 0.0:
+		zoom = shot_zoom
+		scale = Vector2(zoom, zoom)
+	if focus.x >= 0:
+		_center_on(Vector3i(focus.x, VoxelWorld.GROUND + 1, focus.y))
+	# Two seconds: lets card-draw tweens finish and the terrain cache settle.
+	await get_tree().create_timer(2.0).timeout
+	var img: Image = get_viewport().get_texture().get_image()
+	img.save_png(out_path)
+	print("SCREENSHOT_SAVED: ", out_path)
+	get_tree().quit()
 
 # Pan the view so grid cell `g` lands mid-screen.
 func _center_on(g: Vector3i) -> void:
 	var target: Vector2 = iso_pt(float(g.x) + 0.5, float(g.y), float(g.z) + 0.5)
 	position = Vector2(800, 420) - target * zoom
+
+# Pull any present terrain art into the sprite override table. Each entry
+# maps a material to its texture; missing files silently fall back to the
+# polygon renderer, so artwork can be added one terrain type at a time.
+func _load_terrain_sprites() -> void:
+	var manifest := {
+		VoxelWorld.Mat.EARTH: "res://assets/cards/earth.png",
+		VoxelWorld.Mat.WATER: "res://assets/cards/water.png",
+		VoxelWorld.Mat.STONE: "res://assets/cards/boulder.png",
+	}
+	for mat in manifest:
+		var path: String = manifest[mat]
+		if ResourceLoader.exists(path):
+			_terrain_sprites[mat] = load(path)
+	for tpath in ["res://assets/cards/tree_1.png", "res://assets/cards/tree_2.png",
+			"res://assets/cards/dead_tree_1.png", "res://assets/cards/dead_tree_2.png"]:
+		if ResourceLoader.exists(tpath):
+			_tree_variants.append(load(tpath))
+	for sp in ["res://assets/cards/sprout_tall.png",
+			"res://assets/cards/sprout_bush.png",
+			"res://assets/cards/sprout_flower.png"]:
+		if ResourceLoader.exists(sp):
+			_sprout_variants.append(load(sp))
+	for kind in UNIT_KINDS:
+		var upath: String = "res://assets/cards/unit_%s.png" % kind
+		if ResourceLoader.exists(upath):
+			_unit_sprites[kind] = load(upath)
+
+# Pick a tree variant deterministically by column position so the same column
+# always draws the same tree.
+func _tree_variant_for(c: Vector3i) -> Texture2D:
+	if _tree_variants.is_empty():
+		return null
+	var h: int = (c.x * 73856093) ^ (c.z * 19349663)
+	return _tree_variants[absi(h) % _tree_variants.size()]
+
+# Full tree sprite — anchored at the BOTTOM tree cell so the grass base lands
+# on the surface and the canopy sticks up through the air cells above.
+const TREE_SPRITE_SCALE := 1.55       # how wide the canopy reads vs a cube
+const TREE_GROUND_FRAC := 0.92        # where in the image the grass base sits
+									  # (vertical fraction from top, 0..1)
+func _draw_tree(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	var tex: Texture2D = _tree_variant_for(c)
+	if tex == null:
+		return
+	var sprite_w: float = TILE_W * TREE_SPRITE_SCALE
+	var sprite_h: float = sprite_w * float(tex.get_height()) / float(tex.get_width())
+	# Anchor: the grass base in the image (TREE_GROUND_FRAC down from top) lands
+	# at the bottom-front lip of the cell (cell_centre + HEIGHT_STEP/2).
+	var centre: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 0.5, float(c.z) + 0.5) + shake
+	var ground_y: float = centre.y + HEIGHT_STEP * 0.5
+	var rect := Rect2(
+		centre.x - sprite_w * 0.5,
+		ground_y - sprite_h * TREE_GROUND_FRAC,
+		sprite_w, sprite_h
+	)
+	var tint := Color(1, 1, 1, alpha)
+	if shadowed:
+		var d: float = 1.0 - SHADOW_DARKEN
+		tint = Color(d, d, d, alpha)
+	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
+
+# Avalanche hash — decorrelates neighbouring cells and slots. The previous
+# multiplicative hash had linear structure that made the scatter form visible
+# diagonal bands across the meadow.
+func _wang_hash(v: int) -> int:
+	v = (v ^ 61) ^ ((v >> 16) & 0xFFFF)
+	v = (v * 9) & 0xFFFFFFFF
+	v = v ^ (v >> 4)
+	v = (v * 0x27D4EB2D) & 0xFFFFFFFF
+	v = v ^ (v >> 15)
+	return v
+
+# Flat translucent green wash over the exposed top face — turns bare dirt
+# tops into continuous meadow ground without the chunky 3D mat. Exactly
+# matches the face diamond, so adjacent cells share edges with no seams.
+const GRASS_TINT := Color(0.42, 0.68, 0.24, 0.35)
+func _draw_grass_tint(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	var col := GRASS_TINT
+	if shadowed:
+		col = col.darkened(SHADOW_DARKEN)
+	col.a = GRASS_TINT.a * alpha
+	var pts: PackedVector2Array = top_face(c)
+	if shake != Vector2.ZERO:
+		for i in pts.size():
+			pts[i] += shake
+	_draw_canvas.draw_colored_polygon(pts, col)
+
+# Macro patchiness: 2x2 blocks of cells share a lushness tier, so the meadow
+# reads as thick patches with thinner clearings instead of uniform speckle.
+func _cell_lushness(c: Vector3i) -> float:
+	var bh: int = _wang_hash((c.x >> 1) * 198491317 + (c.z >> 1) * 6542989)
+	match bh % 4:
+		0: return 0.45
+		1: return 0.70
+		_: return 0.95
+
+# Up to SPROUT_SLOTS decoration sprites per grass cell, hashed from the cell
+# coordinate so the layout never shimmers between redraws. All of this lands
+# on the CACHED terrain layer — zero per-frame cost; it only re-renders when
+# terrain actually changes.
+const SPROUT_SLOTS := 9
+const SPROUT_GROUND_FRAC := 0.85       # vertical anchor within each sprite
+func _draw_sprouts(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	if _sprout_variants.is_empty():
+		return
+	var lush: float = _cell_lushness(c)
+	var base_h: int = _wang_hash(c.x * 374761393 + c.z * 668265263)
+	var top: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 1, float(c.z) + 0.5) + shake
+	var tint := Color(1, 1, 1, alpha)
+	if shadowed:
+		var d: float = 1.0 - SHADOW_DARKEN
+		tint = Color(d, d, d, alpha)
+	# Collect first, then paint back-to-front so overlapping tufts layer
+	# correctly within the cell.
+	var draws: Array = []
+	for i in SPROUT_SLOTS:
+		var h: int = _wang_hash(base_h + i * 974711)
+		if float(h % 1000) / 1000.0 > lush:
+			continue
+		var h2: int = _wang_hash(h)
+		# Weighted variants: bushes carry the grass mass, tall blades second,
+		# flowers as the rare accent. (Load order: tall, bush, flower.)
+		var variant: int
+		if _sprout_variants.size() == 3:
+			var vroll: int = h2 % 100
+			variant = 0 if vroll < 30 else (1 if vroll < 85 else 2)
+		else:
+			variant = h2 % _sprout_variants.size()
+		var ox: float = float((h2 >> 8) & 0x3FF) / 1023.0 - 0.5
+		var oz: float = float((h2 >> 18) & 0x3FF) / 1023.0 - 0.5
+		# Spread reaches the cell edge so tufts spill across boundaries and
+		# blur the lattice.
+		var pos: Vector2 = top + Vector2(
+			(ox - oz) * TILE_W * 0.45,
+			(ox + oz) * TILE_H * 0.45
+		)
+		var scl: float = 0.32 + 0.30 * float(_wang_hash(h2 + 7919) & 0xFF) / 255.0
+		draws.append({"y": pos.y, "pos": pos, "tex": _sprout_variants[variant], "scl": scl})
+	draws.sort_custom(func(a, b): return a["y"] < b["y"])
+	for d2 in draws:
+		var tex: Texture2D = d2["tex"]
+		var sprite_w: float = TILE_W * float(d2["scl"])
+		var sprite_h: float = sprite_w * float(tex.get_height()) / float(tex.get_width())
+		var pos2: Vector2 = d2["pos"]
+		var rect := Rect2(
+			pos2.x - sprite_w * 0.5,
+			pos2.y - sprite_h * SPROUT_GROUND_FRAC,
+			sprite_w, sprite_h
+		)
+		_draw_canvas.draw_texture_rect(tex, rect, false, tint)
+
+# Should this EARTH cell get a grass mat overlay? True when the cell above is
+# non-solid (air, water, etc.) — i.e. the earth's top face is exposed to sky.
+func _grass_caps(c: Vector3i) -> bool:
+	var above: Vector3i = c + Vector3i(0, 1, 0)
+	return world.in_bounds(above) and not world.is_solid(above)
+
+# Render a cube cell as a single sprite. The bounding rect is sized so the
+# texture's cube portion lines up with the 3-polygon footprint it replaces:
+# TILE_W wide, with the (taller) sprite anchored at the cube's bottom-front
+# corner so any grass / overhang above the cube line just sticks up naturally.
+# Grok generates cubes that fill only ~70% of the image frame. To make the
+# rendered cube fill its footprint (instead of leaving gaps where adjacent
+# cells' lower cubes peek through) we OVERSIZE the sprite so its depicted
+# cube portion lands at exactly TILE_W wide. Neighbouring sprites then
+# overlap and the existing back-to-front draw order hides the seams.
+const TERRAIN_SPRITE_SCALE := 1.45     # fudge factor — how much bigger than TILE_W
+const TERRAIN_SPRITE_V_NUDGE := 6.0    # px to shift sprites down, since image
+									   # cubes tend to sit a bit below image centre
+# Per-material overrides: scale & v-offset for sprites whose visual centre
+# doesn't sit at the cube centre. Falls back to the constants above.
+#  - WATER sits at the TOP of its cell (river surface), not centre.
+#  - STONE is a rounded boulder, smaller than a full cube.
+const _TERRAIN_OVERRIDES := {
+	VoxelWorld.Mat.WATER: {"scale": 1.45, "v": -10.0},
+	VoxelWorld.Mat.STONE: {"scale": 1.10, "v": 4.0},
+}
+
+func _draw_terrain_sprite(c: Vector3i, mat: int, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	var tex: Texture2D = _terrain_sprites[mat]
+	if tex == null:
+		return
+	var override: Dictionary = _TERRAIN_OVERRIDES.get(mat, {})
+	var scale: float = float(override.get("scale", TERRAIN_SPRITE_SCALE))
+	var v_off: float = float(override.get("v", TERRAIN_SPRITE_V_NUDGE))
+	var center: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 0.5, float(c.z) + 0.5) + shake
+	var sprite_w: float = TILE_W * scale
+	var sprite_h: float = sprite_w * float(tex.get_height()) / float(tex.get_width())
+	var rect := Rect2(
+		center.x - sprite_w * 0.5,
+		center.y - sprite_h * 0.5 + v_off,
+		sprite_w, sprite_h
+	)
+	var tint := Color(1, 1, 1, alpha)
+	if shadowed:
+		var d: float = 1.0 - SHADOW_DARKEN
+		tint = Color(d, d, d, alpha)
+	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
 
 # ---------------------------------------------------------------- iso math
 
@@ -386,7 +654,36 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var shake := Vector2(0, _quake_offset(c))
 	var pattern: int = _cell_pattern(c, mat)
 	var shadowed: bool = _is_shadowed(c)
+	# Tree: ONE tall sprite per column, drawn from the BOTTOM cell only —
+	# upper tree cells are part of the same image and skipped here.
+	if mat == VoxelWorld.Mat.TREE and seen_it and not _tree_variants.is_empty():
+		if world.material_at(c + Vector3i(0, -1, 0)) == VoxelWorld.Mat.TREE:
+			return                  # not the base — already drawn by it
+		_draw_tree(c, alpha, shake, shadowed)
+		return
+	# Water sprite override: water cells don't have a FULL_PATTERN (they sit
+	# slim at the trench bottom), so they need their own short-circuit before
+	# the pattern check. Existing chevron overlay still draws on top.
+	if mat == VoxelWorld.Mat.WATER and seen_it and _terrain_sprites.has(mat):
+		_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
+		return
+	# Boulder sprite override: rounded shape, not a cube.
+	if mat == VoxelWorld.Mat.STONE and seen_it and _terrain_sprites.has(mat):
+		_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
+		return
 	if pattern == FULL_PATTERN and mat != VoxelWorld.Mat.TREE:
+		# Sprite override: if we have terrain art for this material AND the
+		# cell is fully visible (not fogged), draw the texture instead of the
+		# 3-polygon cube. Fogged cells fall back to the polygon path so the
+		# fog grey remains legible.
+		if seen_it and _terrain_sprites.has(mat):
+			_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
+			# Natural surface: a flat green wash over the top face (continuous
+			# meadow ground, no seams) plus hashed sprout scatter for texture.
+			if mat == VoxelWorld.Mat.EARTH and _grass_caps(c):
+				_draw_grass_tint(c, alpha, shake, shadowed)
+				_draw_sprouts(c, alpha, shake, shadowed)
+			return
 		_draw_big_cube(c, mat, seen_it, alpha, shake, shadowed)
 		if mat == VoxelWorld.Mat.BUILDING:
 			_draw_building_label(c, shake)
@@ -625,7 +922,23 @@ func _draw_unit(u, alpha: float) -> void:
 	var body_h: float = HEIGHT_STEP * (1.6 if u.kind == "leader" else 1.15)
 	var body_w: float = 18.0 if u.kind == "leader" else 15.0
 	var body_top := feet - Vector2(0, body_h)
-	_draw_capsule(feet, body_top, body_w, col)
+	# Sprite body when art exists for this kind (assets/cards/unit_<kind>.png,
+	# auto-loaded — drop a file in, it's used; no code change). Enemies get a
+	# red wash so teams stay readable; capsules remain the fallback.
+	var utex: Texture2D = _unit_sprites.get(u.kind)
+	if utex != null:
+		var uw: float = TILE_W * UNIT_SPRITE_SCALE
+		var uh: float = uw * float(utex.get_height()) / float(utex.get_width())
+		var urect := Rect2(feet.x - uw * 0.5, feet.y - uh * UNIT_GROUND_FRAC, uw, uh)
+		var umod := Color(1, 1, 1, alpha)
+		if u.team == 1:
+			umod = Color(1.0, 0.62, 0.62, alpha)
+		if u == gs.selected:
+			umod = umod.lightened(0.25)
+		draw_texture_rect(utex, urect, false, umod)
+		body_top = feet - Vector2(0, uh * 0.8)   # badges anchor above the sprite
+	else:
+		_draw_capsule(feet, body_top, body_w, col)
 
 	# Crown for the leader (distinct silhouette).
 	if u.kind == "leader":

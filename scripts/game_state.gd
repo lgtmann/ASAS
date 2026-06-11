@@ -137,7 +137,18 @@ func setup(w) -> void:
 	world = w
 
 func start() -> void:
-	randomize()
+	# `--seed=N` (after the `--` separator) pins the map for reproducible
+	# screenshots — the art pipeline diffs before/after shots on one layout.
+	var fixed_seed: int = -1
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			fixed_seed = int(arg.trim_prefix("--seed="))
+	if fixed_seed >= 0:
+		seed(fixed_seed)
+		world.generate()          # regenerate deterministically under the seed
+		world.version += 1
+	else:
+		randomize()
 	_build_deck()
 	# Player base in the near corner (closest to the screen in iso = highest
 	# x+z), enemy in the far corner. Player starts with ONLY the leader —

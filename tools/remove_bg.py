@@ -39,14 +39,48 @@ def remove_magenta(img: Image.Image) -> Image.Image:
 	return Image.fromarray(arr)
 
 
+def remove_green(img: Image.Image) -> Image.Image:
+	"""Make pixels in the pure-chroma-green range fully transparent. Used as a
+	cleanup pass on terrain art generated with a #00FF00 background — catches
+	whatever fringe halo rembg's U^2-Net leaves behind."""
+	img = img.convert("RGBA")
+	arr = np.array(img)
+	# Chroma key: g dominant, r and b both low. Same tolerance shape as magenta.
+	mask = (arr[:, :, 1] > 180) & (arr[:, :, 0] < 100) & (arr[:, :, 2] < 100)
+	arr[mask, 3] = 0
+	return Image.fromarray(arr)
+
+
+def is_clean_chroma_bg(img: Image.Image, threshold: float = 0.25) -> bool:
+	"""True when at least `threshold` fraction of pixels are pure chroma green
+	(#00FF00 family). Such inputs don't need U^2-Net — the chroma keyer alone
+	produces a much cleaner result, and avoids U^2-Net's failure mode where
+	thin subjects (tree trunks, ladders) get classified as background."""
+	arr = np.array(img.convert("RGB"))
+	mask = (arr[:, :, 1] > 180) & (arr[:, :, 0] < 100) & (arr[:, :, 2] < 100)
+	return float(mask.mean()) > threshold
+
+
 def process_one(path: Path, session) -> None:
 	print(f"  {path.name}", end=" ... ", flush=True)
-	raw_bytes = path.read_bytes()
-	out_bytes = remove(raw_bytes, session=session)
-	img = Image.open(BytesIO(out_bytes))
-	if path.name == "_frame.png":
+	raw_img = Image.open(path)
+	if is_clean_chroma_bg(raw_img):
+		# Skip the ML pass — let remove_green do all the work.
+		print("[chroma-key path]", end=" ", flush=True)
+		img = raw_img.convert("RGBA")
+	else:
+		raw_bytes = path.read_bytes()
+		out_bytes = remove(raw_bytes, session=session)
+		img = Image.open(BytesIO(out_bytes))
+	if path.stem == "_frame":
 		img = remove_magenta(img)
-	out_path = OUT / path.name
+	else:
+		# Terrain art is generated against a chroma-green background; scrub
+		# any green fringe rembg left behind. Harmless on portraits — Grok
+		# rarely paints subjects in saturated #00FF00.
+		img = remove_green(img)
+	# Always write PNG (alpha channel); rename .jpg/.jpeg sources accordingly.
+	out_path = OUT / (path.stem + ".png")
 	img.save(out_path, format="PNG")
 	print(f"-> {out_path.relative_to(ROOT)} ({img.width}x{img.height})")
 
@@ -67,7 +101,9 @@ def main() -> int:
 				return 1
 			targets.append(p)
 	else:
-		targets = sorted(RAW.glob("*.png"))
+		targets = sorted(
+			p for ext in ("*.png", "*.jpg", "*.jpeg") for p in RAW.glob(ext)
+		)
 
 	if not targets:
 		print(f"No PNGs in {RAW.relative_to(ROOT)}. Drop generated images there and re-run.")

@@ -1,0 +1,45 @@
+{
+	"_shared_style": "Isometric voxel game character asset, true 2:1 dimetric isometric projection (classic Monument Valley angle), low-poly stylized 3D render with flat shading and clean edges, soft directional sunlight from the upper-back-left, warm natural palette matching a painterly low-poly meadow world. Single character, full body, centered, facing the lower-left three-quarter view (classic isometric character angle). The character FLOATS with absolutely no ground plane beneath it, no cast shadow on the ground, no surroundings, no border, no text. Background is pure flat solid chroma-green #00FF00 (RGB 0,255,0) filling the entire frame uniformly - NOT gradient, NOT yellow, NOT olive, NOT forest green. Single saturated chroma green edge to edge. Portrait 2:3 composition, character fills about 65% of frame height, feet near the bottom of the frame.",
+	"assets": [
+		{
+			"name": "unit_operator",
+			"prompt": "Subject: a sturdy peasant laborer in a simple earth-brown work tunic with rolled-up sleeves, dark trousers, and leather boots, wearing a small flat cap. Friendly determined expression, slightly oversized head and hands in cute low-poly chibi proportion. Empty hands at sides (tools are rendered separately). Earthy browns and tans with a single muted teal accent on the neckerchief."
+		},
+		{
+			"name": "unit_leader",
+			"prompt": "Subject: a regal commander in a deep blue cloak over light armor, wearing a small simple gold crown, one hand raised pointing forward as if giving orders. Slightly oversized head, cute low-poly chibi proportion, noble confident expression. Rich royal blue with gold trim accents."
+		},
+		{
+			"name": "unit_warrior",
+			"prompt": "Subject: a burly armored fighter with broad shoulders, heavy chest plate, thick gauntlets, and a horned half-helm showing a fierce jaw. Wide stance, fists clenched, no weapon in hands. Slightly oversized head and hands, cute low-poly chibi proportion. Steel greys with deep crimson cloth accents."
+		},
+		{
+			"name": "unit_javelin",
+			"prompt": "Subject: a lean hunter in a hooded sleeveless leather jerkin with a quiver of three light javelins strapped across the back, one arm cocked back holding a single slim javelin ready to throw. Slightly oversized head, cute low-poly chibi proportion, focused narrow-eyed expression. Forest greens and worn leather browns."
+		},
+		{
+			"name": "unit_plow",
+			"prompt": "Subject: a heavy wooden plow machine on two thick wooden rollers, with a wide angled iron blade at the front like a snowplow wedge, rivets and worn metal edges, a small smokestack puffing one tiny cloud. No driver, no animal. Chunky low-poly machine proportions. Oiled walnut wood and dark iron with brass accents."
+		},
+		{
+			"name": "unit_wolf",
+			"prompt": "Subject: a lean grey wolf in a prowling stance, head low, hackles raised, baring small teeth, bushy tail straight back. Slightly oversized head, cute-but-menacing low-poly proportion. Slate greys with a pale snow-white chest and amber eyes."
+		},
+		{
+			"name": "unit_wizard",
+			"prompt": "Subject: a hunched wizard in a deep purple robe with wide sleeves and a tall crooked pointed hat, holding a gnarled wooden staff topped with a small glowing violet crystal. Long grey beard, glowing pale eyes under the hat brim. Slightly oversized head, low-poly chibi proportion. Deep purples with silver star accents."
+		},
+		{
+			"name": "unit_king",
+			"prompt": "Subject: a broad imposing king in heavy golden armor and a large ornate crown, a royal red cape flowing behind, arms crossed smugly over his chest plate. Slightly oversized head, low-poly chibi proportion, haughty raised-chin expression. Bright gold with deep crimson cape and bronze trim."
+		},
+		{
+			"name": "unit_otter",
+			"prompt": "Subject: a sleek brown otter standing upright on hind legs like a general, wearing a small blue naval captain coat with gold buttons and a tiny tricorn hat, one paw resting on a walking-stick oar. Slightly oversized head, cute low-poly chibi proportion, sly confident smirk. Warm otter browns with navy blue and gold accents."
+		},
+		{
+			"name": "unit_boat",
+			"prompt": "Subject: a small wooden rowboat viewed from the isometric angle, with visible plank seams, a single bench seat, and two small oars resting inside, slightly weathered wood with a painted teal stripe along the gunwale. No people, no water - just the boat hull. Chunky low-poly proportions. Warm cedar planks with the teal accent stripe."
+		}
+	]
+}
