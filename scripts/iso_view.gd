@@ -133,6 +133,8 @@ var _terrain_sprites: Dictionary = {}
 var _tree_variants: Array = []
 # Small decoration sprites scattered deterministically on grass cells.
 var _sprout_variants: Array = []
+# Building art keyed by building kind (gs.buildings[cell].kind).
+var _building_sprites: Dictionary = {}
 # Unit body art keyed by kind — auto-loaded from assets/cards/unit_<kind>.png.
 # Missing kinds fall back to the capsule renderer.
 var _unit_sprites: Dictionary = {}
@@ -242,6 +244,7 @@ func _ready() -> void:
 		_center_on(gs.selected.grid)
 	queue_redraw()
 	_maybe_spawn_showcase()
+	_maybe_spawn_built_showcase()
 	_maybe_screenshot_and_quit()
 
 # `--showcase` spawns one unit of every kind near the player base (alternating
@@ -259,6 +262,35 @@ func _maybe_spawn_showcase() -> void:
 			lead.grid.x - 4 + (i % 5) * 2, lead.grid.z - 4 + (i / 5) * 2)
 		var u = gs._spawn_unit(i % 2, spot, kind in ["operator", "warrior", "javelin"])
 		u.kind = kind
+	gs.recompute_vision()
+	queue_redraw()
+
+# `--showcase-built` places one of every building + ladder / bridge /
+# ballista near the player base so one screenshot verifies built-item art.
+func _maybe_spawn_built_showcase() -> void:
+	if not ("--showcase-built" in OS.get_cmdline_user_args()):
+		return
+	var lead = gs.selected
+	if lead == null:
+		return
+	var kinds := ["waterwheel", "storehouse", "village", "trebuchet",
+			"farm", "campsite", "barracks"]
+	for i in kinds.size():
+		var spot: Vector3i = gs._free_spot_near(
+			lead.grid.x - 6 + (i % 4) * 2, lead.grid.z - 6 + (i / 4) * 2)
+		if world.is_standable(spot):
+			world.set_material(spot, VoxelWorld.Mat.BUILDING)
+			gs.buildings[spot] = {"kind": kinds[i], "team": 0, "timer": 2}
+	var bspot: Vector3i = gs._free_spot_near(lead.grid.x + 2, lead.grid.z - 5)
+	if world.is_standable(bspot):
+		world.set_material(bspot, VoxelWorld.Mat.BALLISTA)
+		gs.ballistas.append({"grid": bspot, "team": 0})
+	var lspot: Vector3i = gs._free_spot_near(lead.grid.x + 3, lead.grid.z - 3)
+	if world.is_standable(lspot):
+		world.set_material(lspot, VoxelWorld.Mat.LADDER)
+	var brspot: Vector3i = gs._free_spot_near(lead.grid.x + 4, lead.grid.z - 1)
+	if world.is_standable(brspot):
+		world.set_material(brspot, VoxelWorld.Mat.BRIDGE)
 	gs.recompute_vision()
 	queue_redraw()
 
@@ -306,6 +338,9 @@ func _load_terrain_sprites() -> void:
 		VoxelWorld.Mat.EARTH: "res://assets/cards/earth.png",
 		VoxelWorld.Mat.WATER: "res://assets/cards/water.png",
 		VoxelWorld.Mat.STONE: "res://assets/cards/boulder.png",
+		VoxelWorld.Mat.LADDER: "res://assets/cards/ladder.png",
+		VoxelWorld.Mat.BRIDGE: "res://assets/cards/bridge.png",
+		VoxelWorld.Mat.BALLISTA: "res://assets/cards/ballista.png",
 	}
 	for mat in manifest:
 		var path: String = manifest[mat]
@@ -315,6 +350,11 @@ func _load_terrain_sprites() -> void:
 			"res://assets/cards/dead_tree_1.png", "res://assets/cards/dead_tree_2.png"]:
 		if ResourceLoader.exists(tpath):
 			_tree_variants.append(load(tpath))
+	for bkind in ["waterwheel", "storehouse", "village", "trebuchet",
+			"farm", "campsite", "barracks"]:
+		var bpath: String = "res://assets/cards/building_%s.png" % bkind
+		if ResourceLoader.exists(bpath):
+			_building_sprites[bkind] = load(bpath)
 	for sp in ["res://assets/cards/sprout_tall.png",
 			"res://assets/cards/sprout_bush.png",
 			"res://assets/cards/sprout_flower.png"]:
@@ -474,6 +514,9 @@ const TERRAIN_SPRITE_V_NUDGE := 6.0    # px to shift sprites down, since image
 const _TERRAIN_OVERRIDES := {
 	VoxelWorld.Mat.WATER: {"scale": 1.45, "v": -10.0},
 	VoxelWorld.Mat.STONE: {"scale": 1.10, "v": 4.0},
+	VoxelWorld.Mat.LADDER: {"scale": 1.15, "v": 0.0},
+	VoxelWorld.Mat.BRIDGE: {"scale": 1.45, "v": -11.0},   # deck at the top face
+	VoxelWorld.Mat.BALLISTA: {"scale": 1.30, "v": 2.0},
 }
 
 func _draw_terrain_sprite(c: Vector3i, mat: int, alpha: float, shake: Vector2, shadowed: bool) -> void:
@@ -491,6 +534,21 @@ func _draw_terrain_sprite(c: Vector3i, mat: int, alpha: float, shake: Vector2, s
 		center.y - sprite_h * 0.5 + v_off,
 		sprite_w, sprite_h
 	)
+	var tint := Color(1, 1, 1, alpha)
+	if shadowed:
+		var d: float = 1.0 - SHADOW_DARKEN
+		tint = Color(d, d, d, alpha)
+	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
+
+# Building sprite: bottom edge sits at the cell's bottom-front lip, width a
+# touch wider than the cube so roofs/wheels read; height extends upward
+# naturally (1:1 art is ~1.7 cube-heights tall).
+func _draw_building_sprite(c: Vector3i, tex: Texture2D, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	var centre: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 0.5, float(c.z) + 0.5) + shake
+	var w: float = TILE_W * 1.5
+	var h: float = w * float(tex.get_height()) / float(tex.get_width())
+	var ground_y: float = centre.y + (TILE_H + HEIGHT_STEP) * 0.5
+	var rect := Rect2(centre.x - w * 0.5, ground_y - h, w, h)
 	var tint := Color(1, 1, 1, alpha)
 	if shadowed:
 		var d: float = 1.0 - SHADOW_DARKEN
@@ -669,11 +727,21 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	if mat == VoxelWorld.Mat.STONE and seen_it and _terrain_sprites.has(mat):
 		_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
 		return
+	# Ladder + bridge have non-full sub-cube patterns; sprite them directly.
+	if mat in [VoxelWorld.Mat.LADDER, VoxelWorld.Mat.BRIDGE] and seen_it \
+			and _terrain_sprites.has(mat):
+		_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
+		return
 	if pattern == FULL_PATTERN and mat != VoxelWorld.Mat.TREE:
 		# Sprite override: if we have terrain art for this material AND the
 		# cell is fully visible (not fogged), draw the texture instead of the
 		# 3-polygon cube. Fogged cells fall back to the polygon path so the
 		# fog grey remains legible.
+		if mat == VoxelWorld.Mat.BUILDING and seen_it:
+			var bkind: String = String(gs.buildings.get(c, {}).get("kind", ""))
+			if _building_sprites.has(bkind):
+				_draw_building_sprite(c, _building_sprites[bkind], alpha, shake, shadowed)
+				return
 		if seen_it and _terrain_sprites.has(mat):
 			_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
 			# Natural surface: a flat green wash over the top face (continuous

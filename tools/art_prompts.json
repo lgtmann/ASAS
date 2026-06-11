@@ -1,85 +1,125 @@
 {
-	"_shared_style": "Cel-shaded cartoon game asset in the iconic art style of The Legend of Zelda: The Wind Waker (GameCube 2002): bold flat saturated colors with exactly two tones per surface - one bright sunlit tone and one hard-edged shadow tone, NO gradients, NO soft airbrushed shading, NO photorealism. Thick confident dark outlines around every silhouette and major interior edge. Soft rounded toylike shapes - NO sharp low-poly facets. Cheerful storybook palette: vivid spring greens, warm browns, deep playful ocean blues. Small painterly accents (curls, swirls, specks) instead of texture noise. True 2:1 dimetric isometric projection (classic Monument Valley angle), sunlight from the upper-back-left producing crisp cel shadow boundaries. The subject FLOATS with absolutely no ground plane beneath it, no cast shadow on the ground, no surroundings, no border, no text. Background is pure flat solid chroma-green #00FF00 (RGB 0,255,0) filling the entire frame uniformly - NOT gradient, NOT yellow, NOT olive, NOT forest green. Single saturated chroma green edge to edge.",
-	"assets": [
-		{
-			"name": "earth",
-			"prompt": "Subject: a single cube of warm brown earth with smooth, very slightly rounded edges. The top face is bare packed soil rendered in two flat cel tones with a few painterly darker swirl accents and three or four tiny round pebbles - absolutely NO grass, NO plants, NO moss, NO sprouts. The two visible side faces show simple horizontal soil bands in two-tone browns with a couple of half-buried round stones. Thick dark outline around the cube silhouette. Square 1:1 composition, cube centered, filling about 70% of the frame width, top face as a tilted rhombus and the two side faces as equal trapezoids."
-		},
-		{
-			"name": "water",
-			"prompt": "Subject: a single cube of stylized cartoon ocean water in the iconic Wind Waker water style: the top face is deep saturated cobalt blue covered in pale blue-white swirling foam curls and broken wavy rings, drawn as hard-edged flat cel shapes (no transparency effects, no realistic ripples). The two visible side faces are deep blue with one single lighter horizontal band near the top edge. Thick dark-blue outline around the cube silhouette. Square 1:1 composition, cube centered, filling about 70% of the frame width."
-		},
-		{
-			"name": "boulder",
-			"prompt": "Subject: a single large rounded cartoon boulder, soft potato-like silhouette with two or three big smooth lobes, rendered in exactly two flat grey tones (warm light grey on the sunlit upper-right, cool darker grey in the cel shadow) with two or three short painterly crack lines and one small patch of moss as a flat green accent shape. Thick dark outline. Square 1:1 composition, boulder centered, filling about 65% of the frame."
-		},
-		{
-			"name": "tree_1",
-			"prompt": "Subject: a single complete cheerful tree exactly three cube-cells tall in proportion. A smooth chocolate-brown trunk with a gentle S-curve, two flat cel tones, rising from a tiny ring of bright green grass tufts and two small soil clumps (NO earth cube drawn). The trunk is crowned by a big blobby layered canopy made of three or four overlapping rounded leaf masses with scalloped cartoon edges, vivid spring green with one darker green hard-edged shadow tone on the underside of each mass. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height, canopy near the top edge, grass ring near the bottom edge."
-		},
-		{
-			"name": "tree_2",
-			"prompt": "Subject: a single complete cheerful tree exactly three cube-cells tall in proportion, a DIFFERENT shape from a classic round tree: a straight smooth brown trunk with two flat cel tones rising from a tiny ring of grass tufts (NO earth cube), crowned by one single huge round mushroom-dome canopy, vivid spring green on top with one darker green hard-edged cel shadow tone underneath and a couple of scalloped notches in the silhouette. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
-		},
-		{
-			"name": "dead_tree_1",
-			"prompt": "Subject: a single dead leafless cartoon tree exactly three cube-cells tall in proportion: a twisted grey-brown trunk in two flat cel tones, splitting into four or five crooked bare branches reaching upward with rounded cartoon tips, one tiny knothole, a couple of small painterly bark cracks. Slightly spooky but cute, not scary. NO leaves, NO grass, NO earth cube. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
-		},
-		{
-			"name": "dead_tree_2",
-			"prompt": "Subject: a single dead leafless cartoon tree exactly three cube-cells tall in proportion, DIFFERENT silhouette from a twisted snag: a straight broken trunk in two flat grey-brown cel tones ending in a jagged-but-rounded cartoon break at the top, with two short bare side branches, one hanging strip of peeling bark, a tiny knothole. NO leaves, NO grass, NO earth cube. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
-		},
-		{
-			"name": "sprout_tall",
-			"prompt": "Subject: one single small clump of tall cartoon grass in the iconic Wind Waker grass-tuft style: five to seven flat pointed blades fanning slightly outward like a loose V, vivid spring green with one darker green flat tone at the base, thick dark outlines, rounded blade tips. The clump occupies only the central 30% of the frame width, floating in the lower middle of the frame with generous empty chroma-green space all around. NO soil patch, NO flowers, NO ground."
-		},
-		{
-			"name": "sprout_bush",
-			"prompt": "Subject: one single small rounded cartoon grass mound - a soft dome of short overlapping scalloped leaf clusters, vivid spring green on top with one darker green hard-edged cel shadow tone underneath, thick dark outline. About 35% of the frame width, floating in the lower middle of the frame, generous chroma-green space around it. NO soil, NO flowers, NO ground."
-		},
-		{
-			"name": "sprout_flower",
-			"prompt": "Subject: a tiny cluster of two or three simple cartoon wildflowers among a few short grass blades: each flower a flat five-petal shape in soft buttercup yellow with a tiny round orange center, petals outlined in thick dark line, two flat tones only. The cluster occupies about 30% of the frame width, floating in the lower middle of the frame. NO soil patch, NO ground."
-		},
-		{
-			"name": "unit_operator",
-			"prompt": "Subject: a sturdy cartoon peasant laborer with a big round head, large expressive dark oval eyes and a tiny simple mouth in the Wind Waker facial tradition, wearing a simple earth-brown work tunic with rolled-up sleeves, dark shorts, little leather boots and a small flat cap. Empty hands at sides. Two flat cel tones per surface, thick dark outlines. Earthy browns with one muted teal neckerchief accent. Portrait 2:3 composition, full body centered, character fills about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_leader",
-			"prompt": "Subject: a regal little cartoon commander with a big round head, large expressive dark eyes, confident smile, wearing a deep royal-blue cloak over simple light armor and a small gold crown, one hand raised pointing forward giving orders. Two flat cel tones per surface, thick dark outlines. Royal blue with gold trim accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_warrior",
-			"prompt": "Subject: a burly cartoon fighter with a big round head and fierce eyebrows over large dark eyes, broad shoulders, chunky rounded chest plate, thick gauntlets, and a small horned half-helm. Wide stance, fists clenched, no weapon. Two flat cel tones per surface, thick dark outlines. Steel greys with deep crimson cloth accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_javelin",
-			"prompt": "Subject: a lean cartoon hunter with a big round head and focused narrow eyes, wearing a hooded sleeveless leather jerkin, a quiver of three light javelins across the back, one arm cocked back holding a slim javelin ready to throw. Two flat cel tones per surface, thick dark outlines. Forest greens and warm leather browns. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_plow",
-			"prompt": "Subject: a chunky cartoon wooden plow machine on two thick rounded wooden rollers, a wide curved iron wedge blade at the front like a friendly snowplow, round rivets, one tiny smokestack puffing a single puffy white cloud. No driver, no animal. Rounded toylike shapes, two flat cel tones per surface, thick dark outlines. Warm walnut wood, dark iron, brass accents. Portrait 2:3 composition, machine centered, about 55% of frame height, resting near the bottom edge."
-		},
-		{
-			"name": "unit_wolf",
-			"prompt": "Subject: a lean cartoon wolf in a prowling stance, head low, big expressive amber eyes with mischievous angry eyebrows, small bared teeth, bushy tail straight back. Cute-but-menacing, big head proportion. Two flat cel tones per surface, thick dark outlines. Slate greys with a pale snowy chest. Landscape-friendly pose but PORTRAIT 2:3 composition, wolf centered, about 45% of frame height, paws near the bottom edge."
-		},
-		{
-			"name": "unit_wizard",
-			"prompt": "Subject: a hunched little cartoon wizard with a big round head, glowing pale oval eyes under the brim of a tall crooked pointed hat, long grey beard, deep purple robe with wide sleeves, holding a gnarled staff topped with a small glowing violet crystal. Two flat cel tones per surface, thick dark outlines. Deep purples with silver star accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_king",
-			"prompt": "Subject: a broad imposing cartoon king with a big round head, haughty raised chin, heavy-lidded smug eyes, golden armor with rounded plates, a large ornate crown, and a royal crimson cape, arms crossed over his chest. Two flat cel tones per surface, thick dark outlines. Bright gold, deep crimson, bronze trim. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_otter",
-			"prompt": "Subject: a sleek cartoon otter standing upright on hind legs like a little naval general, big round head with large dark eyes and a sly smirk, whiskers, wearing a small navy captain coat with gold buttons and a tiny tricorn hat, one paw resting on an oar like a walking stick. Two flat cel tones per surface, thick dark outlines. Warm otter browns, navy blue, gold accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
-		},
-		{
-			"name": "unit_boat",
-			"prompt": "Subject: a small cheerful cartoon rowboat viewed from the isometric angle, rounded hull with chunky visible plank seams, a single bench seat, two little oars resting inside, a painted teal stripe along the gunwale, in the spirit of a friendly talking sailboat but with NO face, NO sail, NO people, NO water. Two flat cel tones per surface, thick dark outlines. Warm cedar planks with the teal stripe. Square 1:1 composition, boat centered, about 60% of frame width."
-		}
-	]
+ "_shared_style": "Cel-shaded cartoon game asset in the iconic art style of The Legend of Zelda: The Wind Waker (GameCube 2002): bold flat saturated colors with exactly two tones per surface - one bright sunlit tone and one hard-edged shadow tone, NO gradients, NO soft airbrushed shading, NO photorealism. Thick confident dark outlines around every silhouette and major interior edge. Soft rounded toylike shapes - NO sharp low-poly facets. Cheerful storybook palette: vivid spring greens, warm browns, deep playful ocean blues. Small painterly accents (curls, swirls, specks) instead of texture noise. True 2:1 dimetric isometric projection (classic Monument Valley angle), sunlight from the upper-back-left producing crisp cel shadow boundaries. The subject FLOATS with absolutely no ground plane beneath it, no cast shadow on the ground, no surroundings, no border, no text. Background is pure flat solid chroma-green #00FF00 (RGB 0,255,0) filling the entire frame uniformly - NOT gradient, NOT yellow, NOT olive, NOT forest green. Single saturated chroma green edge to edge.",
+ "assets": [
+  {
+   "name": "earth",
+   "prompt": "Subject: a single cube of warm brown earth with smooth, very slightly rounded edges. The top face is bare packed soil rendered in two flat cel tones with a few painterly darker swirl accents and three or four tiny round pebbles - absolutely NO grass, NO plants, NO moss, NO sprouts. The two visible side faces show simple horizontal soil bands in two-tone browns with a couple of half-buried round stones. Thick dark outline around the cube silhouette. Square 1:1 composition, cube centered, filling about 70% of the frame width, top face as a tilted rhombus and the two side faces as equal trapezoids."
+  },
+  {
+   "name": "water",
+   "prompt": "Subject: a single cube of stylized cartoon ocean water in the iconic Wind Waker water style: the top face is deep saturated cobalt blue covered in pale blue-white swirling foam curls and broken wavy rings, drawn as hard-edged flat cel shapes (no transparency effects, no realistic ripples). The two visible side faces are deep blue with one single lighter horizontal band near the top edge. Thick dark-blue outline around the cube silhouette. Square 1:1 composition, cube centered, filling about 70% of the frame width."
+  },
+  {
+   "name": "boulder",
+   "prompt": "Subject: a single large rounded cartoon boulder, soft potato-like silhouette with two or three big smooth lobes, rendered in exactly two flat grey tones (warm light grey on the sunlit upper-right, cool darker grey in the cel shadow) with two or three short painterly crack lines and one small patch of moss as a flat green accent shape. Thick dark outline. Square 1:1 composition, boulder centered, filling about 65% of the frame."
+  },
+  {
+   "name": "tree_1",
+   "prompt": "Subject: a single complete cheerful tree exactly three cube-cells tall in proportion. A smooth chocolate-brown trunk with a gentle S-curve, two flat cel tones, rising from a tiny ring of bright green grass tufts and two small soil clumps (NO earth cube drawn). The trunk is crowned by a big blobby layered canopy made of three or four overlapping rounded leaf masses with scalloped cartoon edges, vivid spring green with one darker green hard-edged shadow tone on the underside of each mass. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height, canopy near the top edge, grass ring near the bottom edge."
+  },
+  {
+   "name": "tree_2",
+   "prompt": "Subject: a single complete cheerful tree exactly three cube-cells tall in proportion, a DIFFERENT shape from a classic round tree: a straight smooth brown trunk with two flat cel tones rising from a tiny ring of grass tufts (NO earth cube), crowned by one single huge round mushroom-dome canopy, vivid spring green on top with one darker green hard-edged cel shadow tone underneath and a couple of scalloped notches in the silhouette. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
+  },
+  {
+   "name": "dead_tree_1",
+   "prompt": "Subject: a single dead leafless cartoon tree exactly three cube-cells tall in proportion: a twisted grey-brown trunk in two flat cel tones, splitting into four or five crooked bare branches reaching upward with rounded cartoon tips, one tiny knothole, a couple of small painterly bark cracks. Slightly spooky but cute, not scary. NO leaves, NO grass, NO earth cube. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
+  },
+  {
+   "name": "dead_tree_2",
+   "prompt": "Subject: a single dead leafless cartoon tree exactly three cube-cells tall in proportion, DIFFERENT silhouette from a twisted snag: a straight broken trunk in two flat grey-brown cel tones ending in a jagged-but-rounded cartoon break at the top, with two short bare side branches, one hanging strip of peeling bark, a tiny knothole. NO leaves, NO grass, NO earth cube. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
+  },
+  {
+   "name": "sprout_tall",
+   "prompt": "Subject: one single small clump of tall cartoon grass in the iconic Wind Waker grass-tuft style: five to seven flat pointed blades fanning slightly outward like a loose V, vivid spring green with one darker green flat tone at the base, thick dark outlines, rounded blade tips. The clump occupies only the central 30% of the frame width, floating in the lower middle of the frame with generous empty chroma-green space all around. NO soil patch, NO flowers, NO ground."
+  },
+  {
+   "name": "sprout_bush",
+   "prompt": "Subject: one single small rounded cartoon grass mound - a soft dome of short overlapping scalloped leaf clusters, vivid spring green on top with one darker green hard-edged cel shadow tone underneath, thick dark outline. About 35% of the frame width, floating in the lower middle of the frame, generous chroma-green space around it. NO soil, NO flowers, NO ground."
+  },
+  {
+   "name": "sprout_flower",
+   "prompt": "Subject: a tiny cluster of two or three simple cartoon wildflowers among a few short grass blades: each flower a flat five-petal shape in soft buttercup yellow with a tiny round orange center, petals outlined in thick dark line, two flat tones only. The cluster occupies about 30% of the frame width, floating in the lower middle of the frame. NO soil patch, NO ground."
+  },
+  {
+   "name": "unit_operator",
+   "prompt": "Subject: a sturdy cartoon peasant laborer with a big round head, large expressive dark oval eyes and a tiny simple mouth in the Wind Waker facial tradition, wearing a simple earth-brown work tunic with rolled-up sleeves, dark shorts, little leather boots and a small flat cap. Empty hands at sides. Two flat cel tones per surface, thick dark outlines. Earthy browns with one muted teal neckerchief accent. Portrait 2:3 composition, full body centered, character fills about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_leader",
+   "prompt": "Subject: a regal little cartoon commander with a big round head, large expressive dark eyes, confident smile, wearing a deep royal-blue cloak over simple light armor and a small gold crown, one hand raised pointing forward giving orders. Two flat cel tones per surface, thick dark outlines. Royal blue with gold trim accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_warrior",
+   "prompt": "Subject: a burly cartoon fighter with a big round head and fierce eyebrows over large dark eyes, broad shoulders, chunky rounded chest plate, thick gauntlets, and a small horned half-helm. Wide stance, fists clenched, no weapon. Two flat cel tones per surface, thick dark outlines. Steel greys with deep crimson cloth accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_javelin",
+   "prompt": "Subject: a lean cartoon hunter with a big round head and focused narrow eyes, wearing a hooded sleeveless leather jerkin, a quiver of three light javelins across the back, one arm cocked back holding a slim javelin ready to throw. Two flat cel tones per surface, thick dark outlines. Forest greens and warm leather browns. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_plow",
+   "prompt": "Subject: a chunky cartoon wooden plow machine on two thick rounded wooden rollers, a wide curved iron wedge blade at the front like a friendly snowplow, round rivets, one tiny smokestack puffing a single puffy white cloud. No driver, no animal. Rounded toylike shapes, two flat cel tones per surface, thick dark outlines. Warm walnut wood, dark iron, brass accents. Portrait 2:3 composition, machine centered, about 55% of frame height, resting near the bottom edge."
+  },
+  {
+   "name": "unit_wolf",
+   "prompt": "Subject: a lean cartoon wolf in a prowling stance, head low, big expressive amber eyes with mischievous angry eyebrows, small bared teeth, bushy tail straight back. Cute-but-menacing, big head proportion. Two flat cel tones per surface, thick dark outlines. Slate greys with a pale snowy chest. Landscape-friendly pose but PORTRAIT 2:3 composition, wolf centered, about 45% of frame height, paws near the bottom edge."
+  },
+  {
+   "name": "unit_wizard",
+   "prompt": "Subject: a hunched little cartoon wizard with a big round head, glowing pale oval eyes under the brim of a tall crooked pointed hat, long grey beard, deep purple robe with wide sleeves, holding a gnarled staff topped with a small glowing violet crystal. Two flat cel tones per surface, thick dark outlines. Deep purples with silver star accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_king",
+   "prompt": "Subject: a broad imposing cartoon king with a big round head, haughty raised chin, heavy-lidded smug eyes, golden armor with rounded plates, a large ornate crown, and a royal crimson cape, arms crossed over his chest. Two flat cel tones per surface, thick dark outlines. Bright gold, deep crimson, bronze trim. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_otter",
+   "prompt": "Subject: a sleek cartoon otter standing upright on hind legs like a little naval general, big round head with large dark eyes and a sly smirk, whiskers, wearing a small navy captain coat with gold buttons and a tiny tricorn hat, one paw resting on an oar like a walking stick. Two flat cel tones per surface, thick dark outlines. Warm otter browns, navy blue, gold accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
+  },
+  {
+   "name": "unit_boat",
+   "prompt": "Subject: a small cheerful cartoon rowboat viewed from the isometric angle, rounded hull with chunky visible plank seams, a single bench seat, two little oars resting inside, a painted teal stripe along the gunwale, in the spirit of a friendly talking sailboat but with NO face, NO sail, NO people, NO water. Two flat cel tones per surface, thick dark outlines. Warm cedar planks with the teal stripe. Square 1:1 composition, boat centered, about 60% of frame width."
+  },
+  {
+   "name": "ladder",
+   "prompt": "Subject: a simple vertical wooden ladder viewed from the isometric angle - two slim rounded side rails and five evenly spaced rungs, warm honey-brown wood in two flat cel tones with thick dark outlines, a small rope lashing at each rung joint as a tiny detail accent. The ladder stands perfectly vertical, filling about 80% of the frame height and only about 30% of the frame width, centered. NO wall behind it, NO ground, NO cube. Square 1:1 composition."
+  },
+  {
+   "name": "bridge",
+   "prompt": "Subject: a flat RHOMBUS-SHAPED deck of wooden planks viewed from the top at the isometric angle - a tilted diamond exactly matching a single iso cube's top face, made of six or seven parallel warm-brown planks with visible gaps, two rope lashings across the ends, two flat cel tones per plank, thick dark outlines. Slight plank-end raggedness overhanging the diamond edge. NO cube sides, NO depth, NO water, NO posts - just the flat plank deck floating in the frame. Square 1:1 composition, deck fills about 75% of the frame."
+  },
+  {
+   "name": "ballista",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a cartoon wooden ballista siege engine on a low square wooden platform: twin curved torsion arms, a taut rope string, a chunky loaded bolt, a simple aiming crank, rounded toylike proportions, warm walnut wood and dark iron fittings in two flat cel tones with thick dark outlines. Square 1:1 composition, ballista centered, filling about 70% of the frame."
+  },
+  {
+   "name": "building_waterwheel",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a tiny cartoon watermill hut with a large wooden water wheel mounted on its side: whitewashed walls with timber framing, a steep little thatched roof, the big paddle wheel with chunky rounded paddles, two flat cel tones per surface, thick dark outlines, one tiny round window. Square 1:1 composition, building centered, filling about 75% of the frame."
+  },
+  {
+   "name": "building_storehouse",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a chunky cartoon storehouse granary: squat timber warehouse with a wide barn door, a small hoist beam under the roof peak, two stacked crates and one round barrel beside the door, warm cedar planks and a slate-blue roof, two flat cel tones per surface, thick dark outlines. Square 1:1 composition, building centered, filling about 75% of the frame."
+  },
+  {
+   "name": "building_village",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a tiny cartoon village cluster: two small cottages nestled together at slightly different angles, round doors, little chimneys with one single puffy white smoke curl, warm plaster walls with timber framing and cheerful terracotta roofs, two flat cel tones per surface, thick dark outlines. Square 1:1 composition, cluster centered, filling about 75% of the frame."
+  },
+  {
+   "name": "building_trebuchet",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a cartoon wooden trebuchet: tall A-frame timber structure with a long throwing arm tipped by a rope sling, a chunky wooden counterweight box, rounded toylike joints with visible pegs, warm walnut wood and rope details in two flat cel tones with thick dark outlines. The arm rests in the lowered ready position. Square 1:1 composition, trebuchet centered, filling about 80% of the frame."
+  },
+  {
+   "name": "building_farm",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a tiny cartoon farm plot: neat parallel rows of tilled dark soil with small bright green seedling sprouts, one corner occupied by a tiny wooden tool shed with a sloped roof, a single cute scarecrow with a straw hat, two flat cel tones per surface, thick dark outlines. Square 1:1 composition, plot centered, filling about 75% of the frame."
+  },
+  {
+   "name": "building_campsite",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a cozy cartoon campsite: a small triangular canvas tent in muted teal, a campfire of crossed logs with a simple flat-shape orange flame, two short log seats, a tiny cooking pot on a stick tripod, two flat cel tones per surface, thick dark outlines. Square 1:1 composition, campsite centered, filling about 75% of the frame."
+  },
+  {
+   "name": "building_barracks",
+   "prompt": "The structure is designed to sit on a SINGLE isometric cube tile: its base footprint matches the tilted-rhombus top face of one cube, nothing extends sideways past that footprint. Subject: a squat cartoon barracks: low stone-walled building with timber upper floor, a heavy round-arch door, a small crimson banner hanging from a pole, a weapon rack with two training swords beside the entrance, cool stone greys with warm timber and crimson accents, two flat cel tones per surface, thick dark outlines. Square 1:1 composition, building centered, filling about 75% of the frame."
+  }
+ ]
 }
