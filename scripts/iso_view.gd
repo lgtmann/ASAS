@@ -1803,22 +1803,34 @@ func _build_hud() -> void:
 	hint_label.text = "Click a unit to select; click a highlighted cell to act.  RIGHT-CLICK an enemy to attack (swing adjacent / throw at range); right-click elsewhere cancels.  Wheel zooms; Shift+wheel scrolls levels."
 	end_turn_btn = Button.new()
 	end_turn_btn.text = "End Turn"
-	end_turn_btn.position = Vector2(12, 92)
-	end_turn_btn.size = Vector2(110, 32)
+	end_turn_btn.position = Vector2(12, 88)
+	end_turn_btn.size = Vector2(128, 42)
+	end_turn_btn.add_theme_font_size_override("font_size", 18)
+	# Accent: the one button you press every turn gets WW action-green.
+	for state in [["normal", Color(0.27, 0.52, 0.23)], ["hover", Color(0.34, 0.62, 0.28)],
+			["pressed", Color(0.21, 0.42, 0.18)]]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = state[1]
+		sb.border_color = Color(0.12, 0.26, 0.10)
+		sb.set_border_width_all(2)
+		sb.border_width_bottom = 3
+		sb.set_corner_radius_all(8)
+		sb.set_content_margin_all(8)
+		end_turn_btn.add_theme_stylebox_override(state[0], sb)
 	end_turn_btn.pressed.connect(_on_end_turn)
 	hud.add_child(end_turn_btn)
 
 	sim_btn = Button.new()
 	sim_btn.text = "Sim: OFF"
 	sim_btn.toggle_mode = true
-	sim_btn.position = Vector2(130, 92)
+	sim_btn.position = Vector2(152, 92)
 	sim_btn.size = Vector2(110, 32)
 	sim_btn.toggled.connect(_on_sim_toggled)
 	hud.add_child(sim_btn)
 
 	restart_btn = Button.new()
 	restart_btn.text = "Restart"
-	restart_btn.position = Vector2(248, 92)
+	restart_btn.position = Vector2(270, 92)
 	restart_btn.size = Vector2(96, 32)
 	restart_btn.pressed.connect(func(): get_tree().reload_current_scene())
 	hud.add_child(restart_btn)

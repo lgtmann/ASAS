@@ -22,6 +22,10 @@ window/size/viewport_height=900
 window/size/mode=3
 window/stretch/mode="canvas_items"
 
+[gui]
+
+theme/custom="res://assets/ui_theme.tres"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
