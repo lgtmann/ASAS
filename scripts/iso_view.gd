@@ -13,7 +13,6 @@ const HEIGHT_STEP := 22.0
 const MODE_COLORS := {
 	"move": Color(0.40, 1.00, 0.50),
 	"dig": Color(1.00, 0.60, 0.15),
-	"dig_raise": Color(0.78, 0.55, 0.30),     # earth-brown — "dump dirt here"
 	"swing": Color(1.00, 0.40, 0.30),
 	"throw": Color(0.35, 0.85, 1.00),
 	"place_operator": Color(0.55, 0.90, 1.00),
@@ -62,7 +61,6 @@ var targets: Array = []
 var pending_card = null            # card that's mid-placement (Operator)
 # Two-step dig source: the solid cell the player picked first. Cleared once
 # the raise destination is picked (or the action is cancelled).
-var _dig_source: Vector3i = Vector3i(-9999, -9999, -9999)
 
 # Cosmetic in-flight spade projectiles. Each: {from, to, t, dur, boomerang}.
 # A one-way throw runs t in [0, 1]; a boomerang runs t in [0, 2] (out then back).
@@ -1568,12 +1566,6 @@ func _cancel_action() -> void:
 		selected_cards.clear()
 		_on_changed()
 		return
-	# Mid-dig (source picked, waiting on raise): drop back to dig source pick.
-	if mode == "dig_raise":
-		_dig_source = Vector3i(-9999, -9999, -9999)
-		mode = "move"
-		_on_changed()
-		return
 	if pending_card != null:
 		pending_card = null
 		mode = "move"
@@ -1679,22 +1671,9 @@ func _act_on(cell) -> void:
 	var u = gs.selected
 	if u == null:
 		return
-	# Two-step dig has its own dispatch.
+	# Single-step dig: lower the tile one layer, bank +1 earth.
 	if mode == "dig":
-		_dig_source = cell
-		mode = "dig_raise"
-		_on_changed()
-		if targets.is_empty():
-			gs.notice.emit("No raise destination near that tile — pick a different source.")
-			_dig_source = Vector3i(-9999, -9999, -9999)
-			mode = "dig"
-			_on_changed()
-		else:
-			gs.notice.emit("Pick where the dirt should pile up.")
-		return
-	if mode == "dig_raise":
-		gs.dig_and_raise(u, _dig_source, cell)
-		_dig_source = Vector3i(-9999, -9999, -9999)
+		gs.dig_at(u, cell)
 		mode = "move"
 		return
 	match mode:
@@ -1726,7 +1705,6 @@ func _targets_for_mode() -> Array:
 	match mode:
 		"move": return gs.move_targets(u)
 		"dig": return gs.dig_targets(u)
-		"dig_raise": return gs.dig_raise_targets(u, _dig_source)
 		"swing": return gs.swing_targets(u)
 		"throw": return gs.throw_targets(u)
 	return []
@@ -2479,7 +2457,26 @@ func _ctx_button(text: String, x: float, y: float, cb: Callable, disabled: bool 
 # Runtime-load a card image (bypasses the editor import system so dropping a
 # new PNG into assets/cards/ doesn't require re-opening Godot). Returns null
 # if the file is missing; result cached either way for the session.
-func _texture_for(id: String):
+# Cards whose item physically exists in the world show the EXACT art of the
+# thing that gets placed — what you play is what you get.
+const CARD_ART_ALIASES := {
+	"operator": "unit_operator",
+	"warrior": "unit_warrior",
+	"javelin": "unit_javelin",
+	"plow": "unit_plow",
+	"boat": "unit_boat",
+	"dirt_wall": "earth",
+	"waterwheel": "building_waterwheel",
+	"storehouse": "building_storehouse",
+	"village": "building_village",
+	"trebuchet": "building_trebuchet",
+	"farm": "building_farm",
+	"campsite": "building_campsite",
+	"barracks": "building_barracks",
+}
+
+func _texture_for(raw_id: String):
+	var id: String = String(CARD_ART_ALIASES.get(raw_id, raw_id))
 	if _card_textures.has(id):
 		return _card_textures[id]
 	var path := "%s%s.png" % [CARDS_DIR, id]

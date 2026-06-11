@@ -140,6 +140,138 @@
   {
    "name": "icon_hammer",
    "prompt": "Small flat game UI icon, centered, filling about 60% of the frame, bold and readable at 32x32 pixels. Subject: a sturdy cartoon claw hammer held diagonally, warm wooden handle and steel head, two flat cel tones, thick dark outlines. Square 1:1 composition."
+  },
+  {
+   "name": "spade",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: the hero spade — a sturdy cartoon digging spade with a warm wooden handle, simple rope grip wrap, and a polished steel blade, held at a slight jaunty diagonal. Two flat cel tones per surface, thick dark outlines."
+  },
+  {
+   "name": "spade_blade",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade whose steel head is an oversized razor-sharp blade with a gleaming white edge highlight and one small sparkle star. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_pick",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a rugged pickaxe spike jutting from the back of its steel head, small rock chips flying. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_tip",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a reinforced pointed armoured tip in brighter steel, with a small impact star at the point. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_grappling_hook",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a coiled rope and a three-pronged iron grappling hook lashed to the shaft. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_warhead",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a small round black bomb strapped to the head, a short lit fuse with one tiny spark. Playful, not menacing. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_pogostick",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a chunky metal spring coiled around the lower shaft, small bounce motion lines beneath. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_metal_detector",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a small round metal-detector coil and a tiny dial gauge mounted on the shaft, three little gold sparkles near the coil. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_earthquake",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade slammed upright into a cracked earth mound, jagged crack lines radiating outward and two shock arcs in the air. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_laser_rangefinder",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a small scope device with a glowing lens mounted on the shaft, one thin straight red beam line extending diagonally. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_wings",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with two small white feathered wings sprouting from the shaft, gently spread, a couple of loose feathers drifting. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "double_barrel_spade",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with TWO parallel steel blades side by side on a forked shaft. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_dousing_rod",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a forked Y-shaped dowsing twig lashed to the shaft and three small blue water drops floating near the fork. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_propulsion",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a tiny rocket booster strapped to the shaft, a single puffy flame and small smoke puff at the nozzle. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_boomerang",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a curved boomerang-shaped cartoon spade mid-flight with a circular swoosh motion line behind it. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "spade_trigger",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon spade with a pistol-grip handle and trigger guard fitted to the shaft. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "strength",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a flexed cartoon arm with a rolled-up sleeve and one small star pop above the bicep. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "endurance",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cheerful cartoon heart with two small motion arrows circling it. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "dual_wield",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: two cartoon spades crossed in an X, a small star at the crossing point. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "hand_eye",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: an open cartoon hand below a stylized friendly eye, a tiny spade dropping into the palm. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "fishing_pole",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a cartoon fishing rod with a curved line and a round red-and-white bobber, a small happy fish leaping at the hook. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "plant_grove",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: three tiny cheerful saplings sprouting from a small soil mound with two sparkles of growth magic. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "mass_excavation",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a wide cartoon dirt crater with shovel marks and three clods of earth flying out. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "raise_earth",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a chunky pillar of layered earth and stone rising up, with upward motion lines and small pebbles falling off the sides. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "lower_earth",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a chunky block of layered earth sinking into a depression, downward motion lines and dust puffs at the edges. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "call_ancestors",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a friendly glowing blue spirit wisp with a gentle smiling face rising from a small mossy gravestone, two soft sparkles. Warm, not spooky. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "call_descendents",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a glowing hourglass with golden sand and a tiny green sprout growing inside the lower bulb. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "convert_opponent",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a swirling pink-purple hypnosis spiral hovering above a small empty enemy helmet with two little hearts. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "call_lightning",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a single dramatic jagged yellow lightning bolt striking down from a small dark storm cloud, one white flash star at the impact. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "food",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a small woven basket holding a round loaf of bread, two red apples, and a wedge of cheese. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "cooked_food",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: a roasted drumstick and a bowl of stew on a small wooden plate with two curls of steam rising. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "upgrade_choice",
+   "prompt": "Card illustration, single subject centered, filling about 65% of the frame, floating. Square 1:1 composition. Subject: an opening cartoon treasure chest glowing from inside with three rays of golden light and two sparkles. Two flat cel tones, thick dark outlines."
+  },
+  {
+   "name": "_frame",
+   "prompt": "An ornate but rustic trading-card FRAME in cel-shaded Wind Waker style: weathered driftwood border planks with visible grain, lashed with rope crossings at all four corners, one small seashell accent at the top center. Portrait 2:3 composition. The wooden border occupies the outer 12% of the card on all sides; the ENTIRE central rectangular art window inside the border is filled with pure flat magenta #FF00FF (RGB 255,0,255) edge to edge — no decoration inside the window. Everything outside the card's outer edge is pure flat chroma green #00FF00. Two flat cel tones on the wood, thick dark outlines."
   }
  ]
 }

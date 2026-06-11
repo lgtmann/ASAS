@@ -732,7 +732,7 @@ func structure_targets(card) -> Array:
 					seen_cells[p] = true
 					if unit_at(p) != null:
 						continue
-					if not world.is_air(p) and not (id == "boat" and world.is_water(p)):
+					if not world.is_air(p) and not (id in ["boat", "dirt_wall"] and world.is_water(p)):
 						continue
 					if id == "ladder":
 						if _ladder_mountable(p):
@@ -748,7 +748,11 @@ func structure_targets(card) -> Array:
 						# Boats launch ONTO a water cell.
 						if world.is_water(p):
 							out.append(p)
-					elif id == "ballista" or id == "dirt_wall" or id in REGISTERED_BUILDINGS:
+					elif id == "dirt_wall":
+						# On ground, or INTO a water cell (dams the river).
+						if world.is_solid(p + DOWN) or world.is_water(p):
+							out.append(p)
+					elif id == "ballista" or id in REGISTERED_BUILDINGS:
 						# Needs solid ground under it.
 						if world.is_solid(p + DOWN):
 							out.append(p)
@@ -788,8 +792,18 @@ func play_structure_at(card, cell: Vector3i) -> bool:
 		ballistas.append({"grid": cell, "team": TEAM_PLAYER})
 		notice.emit("Ballista built — fires automatically each turn.")
 	elif id == "dirt_wall":
+		var damming: bool = world.is_water(cell)
+		if damming:
+			world.water_flow.erase(cell)
 		world.set_material(cell, VoxelWorld.Mat.EARTH)
-		notice.emit("Dirt wall raised.")
+		if damming:
+			var scheduled: Array = world.recompute_water_flow(cell)
+			if scheduled.size() > 0:
+				notice.emit("River dammed — %d cell(s) will dry, turn by turn." % scheduled.size())
+			else:
+				notice.emit("Dirt wall raised in the river.")
+		else:
+			notice.emit("Dirt wall raised.")
 	elif id == "boat":
 		var boat = _spawn_unit(TEAM_PLAYER, cell, false)
 		boat.kind = "boat"
@@ -2145,25 +2159,19 @@ func dig_at(u, cell: Vector3i) -> void:
 		var label: String = _treasure_reward(mat, cell)
 		if label != "":
 			rewards.append(label)
-	# Dirt has to go somewhere. Pick an adjacent empty standable cell (preferring
-	# neighbours of the dig source so reshaping happens locally) and fill it.
-	var dest = _pick_dig_raise_dest(u, cell)
-	if dest != null:
-		world.set_material(dest, VoxelWorld.Mat.EARTH)
+	# The dug earth goes straight into the bank (the EARTH treasure reward
+	# pays +1) — no dirt placement step. Spend it later via Dirt Wall & co.
 	if not rewards.is_empty():
 		notice.emit("Dug — " + ", ".join(rewards))
-	elif dest != null:
-		notice.emit("Dug — dirt moved to %d, %d, %d." % [dest.x, dest.y, dest.z])
 	else:
 		notice.emit("Dug out a tile.")
+	# Diversion: a cleared cell beside river water at the same level floods.
+	_maybe_divert_water(cell)
 	# Animate the descent if the unit actually dropped (vertical dig path).
 	if u.grid != dig_from:
 		unit_animated_move.emit(u, dig_from, u.grid)
 	_emit_changed()
 
-# Choose an empty standable cell to deposit the dug-out dirt. Preference order:
-# (1) cells adjacent to the dig source, (2) cells adjacent to the operator.
-# Returns null if there's nowhere reasonable for the dirt to land.
 # Apply the energy / card / hand reward for breaking through a treasure tile.
 # Returns a short label of what was hit, for the notice line.
 func _treasure_reward(mat: int, cell := Vector3i(-9999, 0, 0)) -> String:
@@ -2216,104 +2224,6 @@ func _add_random_upgrade_to_hand() -> Dictionary:
 	hand.append(card)
 	cards_drawn.emit(1)
 	return card
-
-func _pick_dig_raise_dest(u, source: Vector3i):
-	var cands: Array = []
-	for d in CARDINAL_6:
-		var p: Vector3i = source + d
-		if p == u.grid:
-			continue
-		if world.is_standable(p) and unit_at(p) == null:
-			cands.append(p)
-	if cands.is_empty():
-		for d in CARDINAL_6:
-			var p: Vector3i = u.grid + d
-			if p == source:
-				continue
-			if world.is_standable(p) and unit_at(p) == null:
-				cands.append(p)
-	if cands.is_empty():
-		return null
-	return cands[randi() % cands.size()]
-
-# Cells the player can pick to *deposit* the dug-out dirt: empty standable
-# cells adjacent to either the dig source or the operator's current position
-# (so the choice covers the natural reshape area).
-func dig_raise_targets(u, source: Vector3i) -> Array:
-	if u == null:
-		return []
-	var out: Array = []
-	for d in CARDINAL_6:
-		var p: Vector3i = source + d
-		if p == u.grid:
-			continue
-		if world.is_standable(p) and unit_at(p) == null:
-			out.append(p)
-	for d in CARDINAL_6:
-		var p: Vector3i = u.grid + d
-		if p == source:
-			continue
-		if world.is_standable(p) and unit_at(p) == null:
-			if not out.has(p):
-				out.append(p)
-	return out
-
-# Two-step atomic dig: clear `source`, raise `dest` to EARTH. Mirrors dig_at's
-# treasure / descent / strength behaviour but with a player-chosen deposit
-# instead of the random auto-pick.
-func dig_and_raise(u, source: Vector3i, dest: Vector3i) -> bool:
-	if u == null or u.spade == null:
-		notice.emit("No spade to dig with.")
-		return false
-	if not world.is_solid(source):
-		notice.emit("Source isn't a solid tile.")
-		return false
-	# Standable cells (air or water with solid below) are valid raise targets.
-	# Picking a water cell as the dest dams the river there.
-	if not (world.is_standable(dest) and unit_at(dest) == null):
-		notice.emit("Destination isn't a valid raise target.")
-		return false
-	if not _consume_action(u):
-		return false
-	var rewards: Array = []
-	var depth: int = u.spade.dig_depth + (1 if u.strength else 0)
-	var dig_from: Vector3i = u.grid
-	if source == u.grid + DOWN:
-		for i in depth:
-			var below: Vector3i = u.grid + DOWN
-			if not world.is_solid(below):
-				break
-			var mat: int = world.dig_cell(below)
-			var label: String = _treasure_reward(mat, below)
-			if label != "":
-				rewards.append(label)
-			u.grid = below
-	else:
-		var mat: int = world.dig_cell(source)
-		var label: String = _treasure_reward(mat, source)
-		if label != "":
-			rewards.append(label)
-	var damming: bool = world.is_water(dest)
-	if damming:
-		world.water_flow.erase(dest)        # remove this cell from the river
-	world.set_material(dest, VoxelWorld.Mat.EARTH)
-	# Diversion: if the just-cleared source sits next to a water cell at the
-	# same y level, the river spreads into it. Inherits flow direction.
-	_maybe_divert_water(source)
-	# After any change involving water, re-check connectivity. A dam SCHEDULES
-	# a gradual drain wave that spreads from the dam, one layer per turn.
-	if damming or world.is_water(source):
-		var scheduled: Array = world.recompute_water_flow(dest if damming else source)
-		if scheduled.size() > 0:
-			notice.emit("River blocked — %d cell(s) will dry, turn by turn." % scheduled.size())
-	if not rewards.is_empty():
-		notice.emit("Dug — " + ", ".join(rewards))
-	else:
-		notice.emit("Dirt moved to %d, %d, %d." % [dest.x, dest.y, dest.z])
-	if u.grid != dig_from:
-		unit_animated_move.emit(u, dig_from, u.grid)
-	_emit_changed()
-	return true
 
 # After a dig clears `source` to AIR, see if it's cardinally adjacent to water
 # at the same y. If so, the river extends into the new cell (matching flow).
