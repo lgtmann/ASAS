@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://cdilmhr0phcgb"
+path="res://.godot/imported/spade_grappling_hook.png-db230dec66dae749480046e52244fcc5.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_grappling_hook.png"
+dest_files=["res://.godot/imported/spade_grappling_hook.png-db230dec66dae749480046e52244fcc5.ctex"]
 
 [params]
 

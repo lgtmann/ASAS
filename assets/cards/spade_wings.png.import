@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://bo2gj1uqxfg5a"
+path="res://.godot/imported/spade_wings.png-5342c56bfcdb4f3214c995f414494629.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_wings.png"
+dest_files=["res://.godot/imported/spade_wings.png-5342c56bfcdb4f3214c995f414494629.ctex"]
 
 [params]
 

@@ -2,12 +2,12 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
+uid="uid://mwdhthlwokpa"
 valid=false
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/raw/convert_opponent.png"
 
 [params]
 

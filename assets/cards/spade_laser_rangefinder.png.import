@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://doy531qpdurs7"
+path="res://.godot/imported/spade_laser_rangefinder.png-9ec7ac4a769684d38fc3e985da64b855.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_laser_rangefinder.png"
+dest_files=["res://.godot/imported/spade_laser_rangefinder.png-9ec7ac4a769684d38fc3e985da64b855.ctex"]
 
 [params]
 

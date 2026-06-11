@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://b3kpvnw7o3r5v"
+path="res://.godot/imported/upgrade_choice.png-844f2bd9355f797e73bc004bc47d3ed3.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/upgrade_choice.png"
+dest_files=["res://.godot/imported/upgrade_choice.png-844f2bd9355f797e73bc004bc47d3ed3.ctex"]
 
 [params]
 

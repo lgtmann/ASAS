@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://ctnelk133njmf"
+path="res://.godot/imported/call_lightning.png-afd66ab3722f89117a97b7c22ba5ab7c.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/call_lightning.png"
+dest_files=["res://.godot/imported/call_lightning.png-afd66ab3722f89117a97b7c22ba5ab7c.ctex"]
 
 [params]
 

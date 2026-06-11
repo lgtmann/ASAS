@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://m6fhnlkgptpn"
+path="res://.godot/imported/fishing_pole.png-fa12080f5ea670b7e7e289a431378560.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/fishing_pole.png"
+dest_files=["res://.godot/imported/fishing_pole.png-fa12080f5ea670b7e7e289a431378560.ctex"]
 
 [params]
 

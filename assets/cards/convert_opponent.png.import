@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://1fa5llq5b4dc"
+path="res://.godot/imported/convert_opponent.png-b596dbf105bf40ed4ab7800f37a4d8be.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/convert_opponent.png"
+dest_files=["res://.godot/imported/convert_opponent.png-b596dbf105bf40ed4ab7800f37a4d8be.ctex"]
 
 [params]
 

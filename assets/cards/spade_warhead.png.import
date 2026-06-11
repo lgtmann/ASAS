@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://b6lqytf0jrraj"
+path="res://.godot/imported/spade_warhead.png-3a87c7b4f7da2b015c368170a718fba8.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_warhead.png"
+dest_files=["res://.godot/imported/spade_warhead.png-3a87c7b4f7da2b015c368170a718fba8.ctex"]
 
 [params]
 

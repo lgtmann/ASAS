@@ -2,12 +2,12 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
+uid="uid://yf3evu3yhphn"
 valid=false
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/raw/mass_excavation.png"
 
 [params]
 

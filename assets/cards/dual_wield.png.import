@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://c68msv16xaf22"
+path="res://.godot/imported/dual_wield.png-f5e69462c0c98cb507fe86985e940f37.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/dual_wield.png"
+dest_files=["res://.godot/imported/dual_wield.png-f5e69462c0c98cb507fe86985e940f37.ctex"]
 
 [params]
 

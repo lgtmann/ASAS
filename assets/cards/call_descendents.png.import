@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://ct1we4ja1mqkx"
+path="res://.godot/imported/call_descendents.png-0508f9e57cfc32ab0547af16cef5383a.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/call_descendents.png"
+dest_files=["res://.godot/imported/call_descendents.png-0508f9e57cfc32ab0547af16cef5383a.ctex"]
 
 [params]
 

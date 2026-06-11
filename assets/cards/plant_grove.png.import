@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://ca3bbjcu0720u"
+path="res://.godot/imported/plant_grove.png-c066f6dd743ae3d1a587c34dedcaaf2f.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/plant_grove.png"
+dest_files=["res://.godot/imported/plant_grove.png-c066f6dd743ae3d1a587c34dedcaaf2f.ctex"]
 
 [params]
 

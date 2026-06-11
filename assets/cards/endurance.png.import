@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://djf25ymcr60h8"
+path="res://.godot/imported/endurance.png-343d84dbb227a8347263eec17f4aa68a.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/endurance.png"
+dest_files=["res://.godot/imported/endurance.png-343d84dbb227a8347263eec17f4aa68a.ctex"]
 
 [params]
 

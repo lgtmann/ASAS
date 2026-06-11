@@ -34,7 +34,8 @@ def remove_magenta(img: Image.Image) -> Image.Image:
 	img = img.convert("RGBA")
 	arr = np.array(img)
 	# Tolerant key: r,b high and g low covers anti-aliasing fringes too.
-	mask = (arr[:, :, 0] > 200) & (arr[:, :, 1] < 60) & (arr[:, :, 2] > 200)
+	# (b stays the strong guard — wood/parchment tones have low blue.)
+	mask = (arr[:, :, 0] > 140) & (arr[:, :, 1] < 120) & (arr[:, :, 2] > 140)
 	arr[mask, 3] = 0
 	return Image.fromarray(arr)
 

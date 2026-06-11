@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://r8a4jimc4n3a"
+path="res://.godot/imported/hand_eye.png-b856b92e91828b136d2852c39a479d23.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/hand_eye.png"
+dest_files=["res://.godot/imported/hand_eye.png-b856b92e91828b136d2852c39a479d23.ctex"]
 
 [params]
 

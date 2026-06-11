@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://dy1sxgohl1g3p"
+path="res://.godot/imported/strength.png-d67d7cd3dcb295a4314968f57b18f9ea.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/strength.png"
+dest_files=["res://.godot/imported/strength.png-d67d7cd3dcb295a4314968f57b18f9ea.ctex"]
 
 [params]
 

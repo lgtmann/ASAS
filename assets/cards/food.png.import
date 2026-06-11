@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://cmchntuw2xaad"
+path="res://.godot/imported/food.png-f3cead95251df63a14a71073ed7555be.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/food.png"
+dest_files=["res://.godot/imported/food.png-f3cead95251df63a14a71073ed7555be.ctex"]
 
 [params]
 

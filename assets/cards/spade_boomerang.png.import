@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://dx60ht8wfnmhe"
+path="res://.godot/imported/spade_boomerang.png-049899fe592eee08d8c47ae69b3ecabc.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_boomerang.png"
+dest_files=["res://.godot/imported/spade_boomerang.png-049899fe592eee08d8c47ae69b3ecabc.ctex"]
 
 [params]
 

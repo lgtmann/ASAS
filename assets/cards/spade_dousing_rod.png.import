@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://dyt2celhi8euh"
+path="res://.godot/imported/spade_dousing_rod.png-190df9953832abb91c01c4ac45109221.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_dousing_rod.png"
+dest_files=["res://.godot/imported/spade_dousing_rod.png-190df9953832abb91c01c4ac45109221.ctex"]
 
 [params]
 

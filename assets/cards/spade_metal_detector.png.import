@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://loxgabb8s88n"
+path="res://.godot/imported/spade_metal_detector.png-9eeeb400a17d01b0dba73cc9b2ef83d2.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_metal_detector.png"
+dest_files=["res://.godot/imported/spade_metal_detector.png-9eeeb400a17d01b0dba73cc9b2ef83d2.ctex"]
 
 [params]
 

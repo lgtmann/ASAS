@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://bxd4dt5nvh10b"
+path="res://.godot/imported/spade_trigger.png-45ff9cf9c15149fd4e90d940be53556b.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/spade_trigger.png"
+dest_files=["res://.godot/imported/spade_trigger.png-45ff9cf9c15149fd4e90d940be53556b.ctex"]
 
 [params]
 

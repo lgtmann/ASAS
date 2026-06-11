@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqhn85ub03jx"
-valid=false
+uid="uid://djver0for38iy"
+path="res://.godot/imported/raise_earth.png-6fb17757c05f0d93ec3afa0b518dfc1a.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://assets/cards/raw/_frame.png"
+source_file="res://assets/cards/raise_earth.png"
+dest_files=["res://.godot/imported/raise_earth.png-6fb17757c05f0d93ec3afa0b518dfc1a.ctex"]
 
 [params]
 
