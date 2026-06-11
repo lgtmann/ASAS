@@ -444,7 +444,7 @@ const WATER_TOP := Color(0.18, 0.46, 0.82)
 const WATER_SIDE := Color(0.13, 0.32, 0.60)
 const WATER_LINE := Color(0.07, 0.16, 0.34)
 const WATER_FOAM := Color(0.88, 0.96, 1.00, 0.40)
-const WATER_LEVEL := 0.45      # surface height within the cell (recessed)
+const WATER_LEVEL := 0.70      # surface height within the cell (slightly recessed)
 
 func _water_at(n: Vector3i) -> bool:
 	return world.is_water(n)
