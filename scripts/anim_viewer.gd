@@ -7,6 +7,10 @@ extends Control
 
 const ANIMATIONS := [
 	{
+		"name": "Ballista (RIG)",
+		"rig": true,
+	},
+	{
 		"name": "Ballista Fire (16f)",
 		"frames": [
 			"res://assets/cards/ballista_f01.png",
@@ -41,6 +45,10 @@ var _speed: float = 1.0
 var _playing: bool = true
 
 var stage: TextureRect
+var rig_stage: Control
+var _rig_mode: bool = false
+var _rig_t: float = -0.3        # idle hold before the cycle starts
+var _rig_tex: Dictionary = {}
 var info: Label
 var play_btn: Button
 
@@ -117,11 +125,55 @@ func _ready() -> void:
 		_advance())
 	add_child(step)
 
+	# Rig stage: custom-draw control sharing the frame stage's footprint.
+	rig_stage = Control.new()
+	rig_stage.position = stage.position
+	rig_stage.size = stage.size
+	rig_stage.draw.connect(func():
+		var sz: float = minf(rig_stage.size.x, rig_stage.size.y)
+		var rect := Rect2((rig_stage.size.x - sz) * 0.5, (rig_stage.size.y - sz) * 0.5, sz, sz)
+		BallistaRig.draw(rig_stage, rect, _rig_t, _rig_tex))
+	stage.get_parent().add_child(rig_stage)
+	for entry in [["body", "res://assets/cards/ballista_body.png"],
+			["bow", "res://assets/cards/ballista_arm_left.png"],
+			["spade", "res://assets/cards/spade.png"]]:
+		if ResourceLoader.exists(entry[1]):
+			_rig_tex[entry[0]] = load(entry[1])
+
 	_load_anim(0)
+	# Tuning harness: --anim-shot=path [--anim-idx=N] [--anim-t=f]
+	var shot_path := ""
+	var shot_t := 0.5
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--anim-shot="):
+			shot_path = arg.trim_prefix("--anim-shot=")
+		elif arg.begins_with("--anim-idx="):
+			_load_anim(int(arg.trim_prefix("--anim-idx=")))
+		elif arg.begins_with("--anim-t="):
+			shot_t = float(arg.trim_prefix("--anim-t="))
+	if shot_path != "":
+		_playing = false
+		_rig_t = shot_t
+		rig_stage.queue_redraw()
+		_shot_and_quit(shot_path)
+
+func _shot_and_quit(out_path: String) -> void:
+	await get_tree().create_timer(0.5).timeout
+	get_viewport().get_texture().get_image().save_png(out_path)
+	print("SCREENSHOT_SAVED: %s" % out_path)
+	get_tree().quit()
 
 func _load_anim(i: int) -> void:
 	var a: Dictionary = ANIMATIONS[i]
 	_anim_name = String(a["name"])
+	_rig_mode = bool(a.get("rig", false))
+	if rig_stage != null:
+		rig_stage.visible = _rig_mode
+	stage.visible = not _rig_mode
+	if _rig_mode:
+		_rig_t = -0.3
+		info.text = "%s   |   %s" % [_anim_name, BallistaRig.phase_name(_rig_t)]
+		return
 	_frames.clear()
 	_labels.clear()
 	_times.clear()
@@ -140,6 +192,13 @@ func _toggle_play() -> void:
 	play_btn.text = "Pause" if _playing else "Play"
 
 func _advance() -> void:
+	if _rig_mode:
+		_rig_t += 0.04
+		if _rig_t > 1.1:
+			_rig_t = -0.3
+		rig_stage.queue_redraw()
+		info.text = "%s   |   t=%.2f   |   %s" % [_anim_name, _rig_t, BallistaRig.phase_name(_rig_t)]
+		return
 	if _frames.is_empty():
 		return
 	_idx = (_idx + 1) % _frames.size()
@@ -155,7 +214,16 @@ func _show_frame() -> void:
 		[_anim_name, _idx + 1, _frames.size(), _labels[_idx], _times[_idx], _speed]
 
 func _process(delta: float) -> void:
-	if not _playing or _frames.is_empty():
+	if not _playing:
+		return
+	if _rig_mode:
+		_rig_t += delta * _speed / BallistaRig.DUR
+		if _rig_t > 1.25:
+			_rig_t = -0.3
+		rig_stage.queue_redraw()
+		info.text = "%s   |   t=%.2f   |   %s" % [_anim_name, _rig_t, BallistaRig.phase_name(_rig_t)]
+		return
+	if _frames.is_empty():
 		return
 	_t += delta * _speed
 	if _t >= float(_times[_idx]):

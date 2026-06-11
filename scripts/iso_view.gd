@@ -135,15 +135,10 @@ var _sprout_variants: Array = []
 var _building_sprites: Dictionary = {}
 # Ballista fire animation: 4 sprite frames (loaded/tense/release/settle) and
 # the in-flight animations keyed by ballista cell.
-var _ballista_frames: Array = []
-var _ballista_anims: Dictionary = {}   # cell -> start time
+var _ballista_rig_tex: Dictionary = {}  # body / bow / spade for BallistaRig
+var _ballista_anims: Dictionary = {}   # cell -> fire start time
 var projectiles_visible: Array = []    # projectiles past their launch delay
-# 16-frame fire cycle: slow draw (1-8), snap (9-10), vibration decay (11-13),
-# settle + dust (14-16). Durations per frame; the projectile launches at the
-# release moment (end of frame 8).
-const BALLISTA_FRAME_DUR := [0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.09,
-		0.045, 0.045, 0.06, 0.06, 0.06, 0.09, 0.09, 0.09]
-const BALLISTA_LAUNCH_DELAY := 0.65    # sum of frames 1-8 + a hair
+const BALLISTA_LAUNCH_DELAY := 0.58    # rig release moment (T_RELEASE * DUR)
 
 # --- ambient animation (procedural puppet motion + canvas particles) ---
 var _anim_t: float = 0.0             # global animation clock (secs)
@@ -508,7 +503,6 @@ func _load_terrain_sprites() -> void:
 		VoxelWorld.Mat.STONE: "res://assets/cards/boulder.png",
 		VoxelWorld.Mat.LADDER: "res://assets/cards/ladder.png",
 		VoxelWorld.Mat.BRIDGE: "res://assets/cards/bridge.png",
-		VoxelWorld.Mat.BALLISTA: "res://assets/cards/ballista.png",
 	}
 	for mat in manifest:
 		var path: String = manifest[mat]
@@ -518,12 +512,11 @@ func _load_terrain_sprites() -> void:
 			"res://assets/cards/dead_tree_1.png", "res://assets/cards/dead_tree_2.png"]:
 		if ResourceLoader.exists(tpath):
 			_tree_variants.append(load(tpath))
-	for fi in range(1, 17):
-		var fp: String = "res://assets/cards/ballista_f%02d.png" % fi
-		if ResourceLoader.exists(fp):
-			_ballista_frames.append(load(fp))
-	if _ballista_frames.size() != 16:
-		_ballista_frames.clear()      # incomplete set — stay static
+	for entry in [["body", "res://assets/cards/ballista_body.png"],
+			["bow", "res://assets/cards/ballista_arm_left.png"],
+			["spade", "res://assets/cards/spade.png"]]:
+		if ResourceLoader.exists(entry[1]):
+			_ballista_rig_tex[entry[0]] = load(entry[1])
 	for bkind in ["waterwheel", "storehouse", "village", "trebuchet",
 			"farm", "campsite", "barracks"]:
 		var bpath: String = "res://assets/cards/building_%s.png" % bkind
@@ -751,32 +744,30 @@ func _on_unit_died(u, _grid: Vector3i) -> void:
 
 var _ballista_shot_pending: bool = false
 func _on_ballista_fired(cell: Vector3i) -> void:
-	if not _ballista_frames.is_empty():
+	if not _ballista_rig_tex.is_empty():
 		_ballista_anims[cell] = _anim_t
 		_ballista_shot_pending = true   # next spade_thrown gets the launch delay
 
-# Fire frames draw on the LIVE layer directly over the cached static sprite —
-# same rect math as the terrain sprite, so they cover it exactly. When the
-# sequence ends the cached loaded-bolt sprite shows through again (reload).
+# Every ballista draws as a live-layer rig: idle loaded pose normally, the
+# smooth fire cycle when firing. Same footprint the static sprite used.
 func _draw_ballista_anims() -> void:
-	for cell_v in _ballista_anims.keys():
-		var cell: Vector3i = cell_v
-		var t: float = _anim_t - float(_ballista_anims[cell])
-		var frame: int = -1
-		var acc: float = 0.0
-		for fi in BALLISTA_FRAME_DUR.size():
-			acc += BALLISTA_FRAME_DUR[fi]
-			if t < acc:
-				frame = fi
-				break
-		if frame < 0:
-			_ballista_anims.erase(cell)
+	if _ballista_rig_tex.is_empty():
+		return
+	for b in gs.ballistas:
+		var cell: Vector3i = b["grid"]
+		if not gs.seen.has(cell):
 			continue
-		var tex: Texture2D = _ballista_frames[frame]
+		var t: float = -1.0
+		if _ballista_anims.has(cell):
+			t = (_anim_t - float(_ballista_anims[cell])) / BallistaRig.DUR
+			if t > 1.0:
+				_ballista_anims.erase(cell)
+				t = -1.0
 		var centre: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y) + 0.5, float(cell.z) + 0.5)
 		var w: float = TILE_W * 1.30
-		var h: float = w * float(tex.get_height()) / float(tex.get_width())
-		draw_texture_rect(tex, Rect2(centre.x - w * 0.5, centre.y - h * 0.5 + 2.0, w, h), false)
+		BallistaRig.draw(self, Rect2(centre.x - w * 0.5, centre.y - w * 0.5 + 2.0, w, w),
+			t, _ballista_rig_tex)
+
 
 func _on_terrain_hit(cell: Vector3i, mat: int) -> void:
 	var top: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y + 1), float(cell.z) + 0.5)
@@ -1001,6 +992,10 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	# Boulder sprite override: rounded shape, not a cube.
 	if mat == VoxelWorld.Mat.STONE and seen_it and _terrain_sprites.has(mat):
 		_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
+		return
+	# Ballistas render as a live-layer RIG (smooth fire animation); the cached
+	# terrain pass draws nothing for them once seen.
+	if mat == VoxelWorld.Mat.BALLISTA and seen_it and not _ballista_rig_tex.is_empty():
 		return
 	# Ladder + bridge have non-full sub-cube patterns; sprite them directly.
 	if mat in [VoxelWorld.Mat.LADDER, VoxelWorld.Mat.BRIDGE] and seen_it \
