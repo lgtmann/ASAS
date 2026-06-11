@@ -356,12 +356,91 @@ func _center_on(g: Vector3i) -> void:
 	var target: Vector2 = iso_pt(float(g.x) + 0.5, float(g.y), float(g.z) + 0.5)
 	position = Vector2(800, 420) - target * zoom
 
+# --- Continuous ground -------------------------------------------------------
+# Earth renders as flat colour planes instead of tiled outlined cubes: adjacent
+# top faces share edges exactly, so the surface reads as ONE plane. Dark
+# contour lines are drawn only where the plane breaks — height steps, cliff
+# lips, water banks, the map silhouette — so the world looks like terrain, not
+# a grid. (Cells remain individually selectable; highlights are unaffected.)
+const EARTH_TOP := Color(0.74, 0.56, 0.35)
+const EARTH_RIGHT := Color(0.58, 0.42, 0.26)
+const EARTH_LEFT := Color(0.47, 0.33, 0.20)
+const GROUND_OUTLINE := Color(0.22, 0.14, 0.09)
+const OUTLINE_W := 2.5
+const STRATA_W := 1.4
+
+# Is the neighbouring column part of the same walkable plane? (Earth at the
+# same level with nothing solid on top — then no line between us.)
+func _same_plane(n: Vector3i) -> bool:
+	return world.material_at(n) == VoxelWorld.Mat.EARTH \
+			and not world.is_solid(n + Vector3i(0, 1, 0))
+
+func _draw_flat_earth(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
+	var dk: float = (1.0 - SHADOW_DARKEN) if shadowed else 1.0
+	var up := Vector3i(0, 1, 0)
+	var t_back: Vector2 = iso(c + Vector3i(0, 1, 0)) + shake
+	var t_right: Vector2 = iso(c + Vector3i(1, 1, 0)) + shake
+	var t_front: Vector2 = iso(c + Vector3i(1, 1, 1)) + shake
+	var t_left: Vector2 = iso(c + Vector3i(0, 1, 1)) + shake
+	var b_right: Vector2 = iso(c + Vector3i(1, 0, 0)) + shake
+	var b_front: Vector2 = iso(c + Vector3i(1, 0, 1)) + shake
+	var b_left: Vector2 = iso(c + Vector3i(0, 0, 1)) + shake
+	var top_exposed: bool = not world.is_solid(c + up)
+	var right_exposed: bool = not world.is_solid(c + Vector3i(1, 0, 0))
+	var left_exposed: bool = not world.is_solid(c + Vector3i(0, 0, 1))
+
+	if top_exposed:
+		var tc := Color(EARTH_TOP.r * dk, EARTH_TOP.g * dk, EARTH_TOP.b * dk, alpha)
+		_draw_canvas.draw_colored_polygon(
+			PackedVector2Array([t_back, t_right, t_front, t_left]), tc)
+	if right_exposed:
+		var rc := Color(EARTH_RIGHT.r * dk, EARTH_RIGHT.g * dk, EARTH_RIGHT.b * dk, alpha)
+		_draw_canvas.draw_colored_polygon(
+			PackedVector2Array([t_right, t_front, b_front, b_right]), rc)
+		_draw_strata(t_right, t_front, b_right, b_front, rc, alpha)
+	if left_exposed:
+		var lc := Color(EARTH_LEFT.r * dk, EARTH_LEFT.g * dk, EARTH_LEFT.b * dk, alpha)
+		_draw_canvas.draw_colored_polygon(
+			PackedVector2Array([t_front, t_left, b_left, b_front]), lc)
+		_draw_strata(t_front, t_left, b_front, b_left, lc, alpha)
+
+	# Contour outlines: a top edge gets a line only when the neighbour does
+	# NOT continue the same plane (height change, water, map edge, other mat).
+	if top_exposed:
+		var oc := Color(GROUND_OUTLINE.r, GROUND_OUTLINE.g, GROUND_OUTLINE.b, alpha)
+		var edges := [
+			[Vector3i(0, 0, -1), t_back, t_right],
+			[Vector3i(1, 0, 0), t_right, t_front],
+			[Vector3i(0, 0, 1), t_front, t_left],
+			[Vector3i(-1, 0, 0), t_left, t_back],
+		]
+		for e in edges:
+			if not _same_plane(c + e[0]):
+				_draw_canvas.draw_line(e[1], e[2], oc, OUTLINE_W)
+	# Cliff silhouette: front vertical corner where both faces show, and the
+	# bottom lip where a face meets a lower floor instead of more cliff.
+	var oc2 := Color(GROUND_OUTLINE.r, GROUND_OUTLINE.g, GROUND_OUTLINE.b, alpha * 0.9)
+	if right_exposed and left_exposed:
+		_draw_canvas.draw_line(t_front, b_front, oc2, OUTLINE_W)
+	var below := c + Vector3i(0, -1, 0)
+	if right_exposed and not (world.is_solid(below) and not world.is_solid(below + Vector3i(1, 0, 0))):
+		_draw_canvas.draw_line(b_right, b_front, oc2, OUTLINE_W)
+	if left_exposed and not (world.is_solid(below) and not world.is_solid(below + Vector3i(0, 0, 1))):
+		_draw_canvas.draw_line(b_front, b_left, oc2, OUTLINE_W)
+
+# Faint horizontal soil bands on exposed cliff faces. Bands sit at fixed
+# height fractions, so they align across neighbouring columns into continuous
+# strata lines.
+func _draw_strata(ta: Vector2, tb: Vector2, ba: Vector2, bb: Vector2, base: Color, alpha: float) -> void:
+	var band := Color(base.r * 0.82, base.g * 0.82, base.b * 0.82, alpha * 0.8)
+	for f in [0.38, 0.72]:
+		_draw_canvas.draw_line(ta.lerp(ba, f), tb.lerp(bb, f), band, STRATA_W)
+
 # Pull any present terrain art into the sprite override table. Each entry
 # maps a material to its texture; missing files silently fall back to the
 # polygon renderer, so artwork can be added one terrain type at a time.
 func _load_terrain_sprites() -> void:
 	var manifest := {
-		VoxelWorld.Mat.EARTH: "res://assets/cards/earth.png",
 		VoxelWorld.Mat.WATER: "res://assets/cards/water.png",
 		VoxelWorld.Mat.STONE: "res://assets/cards/boulder.png",
 		VoxelWorld.Mat.LADDER: "res://assets/cards/ladder.png",
@@ -845,13 +924,15 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 			if _building_sprites.has(bkind):
 				_draw_building_sprite(c, _building_sprites[bkind], alpha, shake, shadowed)
 				return
-		if seen_it and _terrain_sprites.has(mat):
-			_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
-			# Natural surface: a flat green wash over the top face (continuous
-			# meadow ground, no seams) plus hashed sprout scatter for texture.
-			if mat == VoxelWorld.Mat.EARTH and _grass_caps(c):
+		# Earth: continuous flat planes with contour outlines (no per-cell art).
+		if mat == VoxelWorld.Mat.EARTH and seen_it:
+			_draw_flat_earth(c, alpha, shake, shadowed)
+			if _grass_caps(c):
 				_draw_grass_tint(c, alpha, shake, shadowed)
 				_draw_sprouts(c, alpha, shake, shadowed)
+			return
+		if seen_it and _terrain_sprites.has(mat):
+			_draw_terrain_sprite(c, mat, alpha, shake, shadowed)
 			return
 		_draw_big_cube(c, mat, seen_it, alpha, shake, shadowed)
 		if mat == VoxelWorld.Mat.BUILDING:
