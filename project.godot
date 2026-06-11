@@ -12,7 +12,7 @@ config_version=5
 
 config/name="A Spade's A Spade"
 config/description="ASAS - a 3D voxel deckbuilder where the spade is the core implement."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/title.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 
 [display]
