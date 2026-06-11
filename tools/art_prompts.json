@@ -1,45 +1,85 @@
 {
-	"_shared_style": "Isometric voxel game character asset, true 2:1 dimetric isometric projection (classic Monument Valley angle), low-poly stylized 3D render with flat shading and clean edges, soft directional sunlight from the upper-back-left, warm natural palette matching a painterly low-poly meadow world. Single character, full body, centered, facing the lower-left three-quarter view (classic isometric character angle). The character FLOATS with absolutely no ground plane beneath it, no cast shadow on the ground, no surroundings, no border, no text. Background is pure flat solid chroma-green #00FF00 (RGB 0,255,0) filling the entire frame uniformly - NOT gradient, NOT yellow, NOT olive, NOT forest green. Single saturated chroma green edge to edge. Portrait 2:3 composition, character fills about 65% of frame height, feet near the bottom of the frame.",
+	"_shared_style": "Cel-shaded cartoon game asset in the iconic art style of The Legend of Zelda: The Wind Waker (GameCube 2002): bold flat saturated colors with exactly two tones per surface - one bright sunlit tone and one hard-edged shadow tone, NO gradients, NO soft airbrushed shading, NO photorealism. Thick confident dark outlines around every silhouette and major interior edge. Soft rounded toylike shapes - NO sharp low-poly facets. Cheerful storybook palette: vivid spring greens, warm browns, deep playful ocean blues. Small painterly accents (curls, swirls, specks) instead of texture noise. True 2:1 dimetric isometric projection (classic Monument Valley angle), sunlight from the upper-back-left producing crisp cel shadow boundaries. The subject FLOATS with absolutely no ground plane beneath it, no cast shadow on the ground, no surroundings, no border, no text. Background is pure flat solid chroma-green #00FF00 (RGB 0,255,0) filling the entire frame uniformly - NOT gradient, NOT yellow, NOT olive, NOT forest green. Single saturated chroma green edge to edge.",
 	"assets": [
 		{
+			"name": "earth",
+			"prompt": "Subject: a single cube of warm brown earth with smooth, very slightly rounded edges. The top face is bare packed soil rendered in two flat cel tones with a few painterly darker swirl accents and three or four tiny round pebbles - absolutely NO grass, NO plants, NO moss, NO sprouts. The two visible side faces show simple horizontal soil bands in two-tone browns with a couple of half-buried round stones. Thick dark outline around the cube silhouette. Square 1:1 composition, cube centered, filling about 70% of the frame width, top face as a tilted rhombus and the two side faces as equal trapezoids."
+		},
+		{
+			"name": "water",
+			"prompt": "Subject: a single cube of stylized cartoon ocean water in the iconic Wind Waker water style: the top face is deep saturated cobalt blue covered in pale blue-white swirling foam curls and broken wavy rings, drawn as hard-edged flat cel shapes (no transparency effects, no realistic ripples). The two visible side faces are deep blue with one single lighter horizontal band near the top edge. Thick dark-blue outline around the cube silhouette. Square 1:1 composition, cube centered, filling about 70% of the frame width."
+		},
+		{
+			"name": "boulder",
+			"prompt": "Subject: a single large rounded cartoon boulder, soft potato-like silhouette with two or three big smooth lobes, rendered in exactly two flat grey tones (warm light grey on the sunlit upper-right, cool darker grey in the cel shadow) with two or three short painterly crack lines and one small patch of moss as a flat green accent shape. Thick dark outline. Square 1:1 composition, boulder centered, filling about 65% of the frame."
+		},
+		{
+			"name": "tree_1",
+			"prompt": "Subject: a single complete cheerful tree exactly three cube-cells tall in proportion. A smooth chocolate-brown trunk with a gentle S-curve, two flat cel tones, rising from a tiny ring of bright green grass tufts and two small soil clumps (NO earth cube drawn). The trunk is crowned by a big blobby layered canopy made of three or four overlapping rounded leaf masses with scalloped cartoon edges, vivid spring green with one darker green hard-edged shadow tone on the underside of each mass. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height, canopy near the top edge, grass ring near the bottom edge."
+		},
+		{
+			"name": "tree_2",
+			"prompt": "Subject: a single complete cheerful tree exactly three cube-cells tall in proportion, a DIFFERENT shape from a classic round tree: a straight smooth brown trunk with two flat cel tones rising from a tiny ring of grass tufts (NO earth cube), crowned by one single huge round mushroom-dome canopy, vivid spring green on top with one darker green hard-edged cel shadow tone underneath and a couple of scalloped notches in the silhouette. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
+		},
+		{
+			"name": "dead_tree_1",
+			"prompt": "Subject: a single dead leafless cartoon tree exactly three cube-cells tall in proportion: a twisted grey-brown trunk in two flat cel tones, splitting into four or five crooked bare branches reaching upward with rounded cartoon tips, one tiny knothole, a couple of small painterly bark cracks. Slightly spooky but cute, not scary. NO leaves, NO grass, NO earth cube. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
+		},
+		{
+			"name": "dead_tree_2",
+			"prompt": "Subject: a single dead leafless cartoon tree exactly three cube-cells tall in proportion, DIFFERENT silhouette from a twisted snag: a straight broken trunk in two flat grey-brown cel tones ending in a jagged-but-rounded cartoon break at the top, with two short bare side branches, one hanging strip of peeling bark, a tiny knothole. NO leaves, NO grass, NO earth cube. Thick dark outlines. Portrait 2:3 composition, tree centered, filling about 85% of frame height."
+		},
+		{
+			"name": "sprout_tall",
+			"prompt": "Subject: one single small clump of tall cartoon grass in the iconic Wind Waker grass-tuft style: five to seven flat pointed blades fanning slightly outward like a loose V, vivid spring green with one darker green flat tone at the base, thick dark outlines, rounded blade tips. The clump occupies only the central 30% of the frame width, floating in the lower middle of the frame with generous empty chroma-green space all around. NO soil patch, NO flowers, NO ground."
+		},
+		{
+			"name": "sprout_bush",
+			"prompt": "Subject: one single small rounded cartoon grass mound - a soft dome of short overlapping scalloped leaf clusters, vivid spring green on top with one darker green hard-edged cel shadow tone underneath, thick dark outline. About 35% of the frame width, floating in the lower middle of the frame, generous chroma-green space around it. NO soil, NO flowers, NO ground."
+		},
+		{
+			"name": "sprout_flower",
+			"prompt": "Subject: a tiny cluster of two or three simple cartoon wildflowers among a few short grass blades: each flower a flat five-petal shape in soft buttercup yellow with a tiny round orange center, petals outlined in thick dark line, two flat tones only. The cluster occupies about 30% of the frame width, floating in the lower middle of the frame. NO soil patch, NO ground."
+		},
+		{
 			"name": "unit_operator",
-			"prompt": "Subject: a sturdy peasant laborer in a simple earth-brown work tunic with rolled-up sleeves, dark trousers, and leather boots, wearing a small flat cap. Friendly determined expression, slightly oversized head and hands in cute low-poly chibi proportion. Empty hands at sides (tools are rendered separately). Earthy browns and tans with a single muted teal accent on the neckerchief."
+			"prompt": "Subject: a sturdy cartoon peasant laborer with a big round head, large expressive dark oval eyes and a tiny simple mouth in the Wind Waker facial tradition, wearing a simple earth-brown work tunic with rolled-up sleeves, dark shorts, little leather boots and a small flat cap. Empty hands at sides. Two flat cel tones per surface, thick dark outlines. Earthy browns with one muted teal neckerchief accent. Portrait 2:3 composition, full body centered, character fills about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_leader",
-			"prompt": "Subject: a regal commander in a deep blue cloak over light armor, wearing a small simple gold crown, one hand raised pointing forward as if giving orders. Slightly oversized head, cute low-poly chibi proportion, noble confident expression. Rich royal blue with gold trim accents."
+			"prompt": "Subject: a regal little cartoon commander with a big round head, large expressive dark eyes, confident smile, wearing a deep royal-blue cloak over simple light armor and a small gold crown, one hand raised pointing forward giving orders. Two flat cel tones per surface, thick dark outlines. Royal blue with gold trim accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_warrior",
-			"prompt": "Subject: a burly armored fighter with broad shoulders, heavy chest plate, thick gauntlets, and a horned half-helm showing a fierce jaw. Wide stance, fists clenched, no weapon in hands. Slightly oversized head and hands, cute low-poly chibi proportion. Steel greys with deep crimson cloth accents."
+			"prompt": "Subject: a burly cartoon fighter with a big round head and fierce eyebrows over large dark eyes, broad shoulders, chunky rounded chest plate, thick gauntlets, and a small horned half-helm. Wide stance, fists clenched, no weapon. Two flat cel tones per surface, thick dark outlines. Steel greys with deep crimson cloth accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_javelin",
-			"prompt": "Subject: a lean hunter in a hooded sleeveless leather jerkin with a quiver of three light javelins strapped across the back, one arm cocked back holding a single slim javelin ready to throw. Slightly oversized head, cute low-poly chibi proportion, focused narrow-eyed expression. Forest greens and worn leather browns."
+			"prompt": "Subject: a lean cartoon hunter with a big round head and focused narrow eyes, wearing a hooded sleeveless leather jerkin, a quiver of three light javelins across the back, one arm cocked back holding a slim javelin ready to throw. Two flat cel tones per surface, thick dark outlines. Forest greens and warm leather browns. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_plow",
-			"prompt": "Subject: a heavy wooden plow machine on two thick wooden rollers, with a wide angled iron blade at the front like a snowplow wedge, rivets and worn metal edges, a small smokestack puffing one tiny cloud. No driver, no animal. Chunky low-poly machine proportions. Oiled walnut wood and dark iron with brass accents."
+			"prompt": "Subject: a chunky cartoon wooden plow machine on two thick rounded wooden rollers, a wide curved iron wedge blade at the front like a friendly snowplow, round rivets, one tiny smokestack puffing a single puffy white cloud. No driver, no animal. Rounded toylike shapes, two flat cel tones per surface, thick dark outlines. Warm walnut wood, dark iron, brass accents. Portrait 2:3 composition, machine centered, about 55% of frame height, resting near the bottom edge."
 		},
 		{
 			"name": "unit_wolf",
-			"prompt": "Subject: a lean grey wolf in a prowling stance, head low, hackles raised, baring small teeth, bushy tail straight back. Slightly oversized head, cute-but-menacing low-poly proportion. Slate greys with a pale snow-white chest and amber eyes."
+			"prompt": "Subject: a lean cartoon wolf in a prowling stance, head low, big expressive amber eyes with mischievous angry eyebrows, small bared teeth, bushy tail straight back. Cute-but-menacing, big head proportion. Two flat cel tones per surface, thick dark outlines. Slate greys with a pale snowy chest. Landscape-friendly pose but PORTRAIT 2:3 composition, wolf centered, about 45% of frame height, paws near the bottom edge."
 		},
 		{
 			"name": "unit_wizard",
-			"prompt": "Subject: a hunched wizard in a deep purple robe with wide sleeves and a tall crooked pointed hat, holding a gnarled wooden staff topped with a small glowing violet crystal. Long grey beard, glowing pale eyes under the hat brim. Slightly oversized head, low-poly chibi proportion. Deep purples with silver star accents."
+			"prompt": "Subject: a hunched little cartoon wizard with a big round head, glowing pale oval eyes under the brim of a tall crooked pointed hat, long grey beard, deep purple robe with wide sleeves, holding a gnarled staff topped with a small glowing violet crystal. Two flat cel tones per surface, thick dark outlines. Deep purples with silver star accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_king",
-			"prompt": "Subject: a broad imposing king in heavy golden armor and a large ornate crown, a royal red cape flowing behind, arms crossed smugly over his chest plate. Slightly oversized head, low-poly chibi proportion, haughty raised-chin expression. Bright gold with deep crimson cape and bronze trim."
+			"prompt": "Subject: a broad imposing cartoon king with a big round head, haughty raised chin, heavy-lidded smug eyes, golden armor with rounded plates, a large ornate crown, and a royal crimson cape, arms crossed over his chest. Two flat cel tones per surface, thick dark outlines. Bright gold, deep crimson, bronze trim. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_otter",
-			"prompt": "Subject: a sleek brown otter standing upright on hind legs like a general, wearing a small blue naval captain coat with gold buttons and a tiny tricorn hat, one paw resting on a walking-stick oar. Slightly oversized head, cute low-poly chibi proportion, sly confident smirk. Warm otter browns with navy blue and gold accents."
+			"prompt": "Subject: a sleek cartoon otter standing upright on hind legs like a little naval general, big round head with large dark eyes and a sly smirk, whiskers, wearing a small navy captain coat with gold buttons and a tiny tricorn hat, one paw resting on an oar like a walking stick. Two flat cel tones per surface, thick dark outlines. Warm otter browns, navy blue, gold accents. Portrait 2:3 composition, full body centered, about 65% of frame height, feet near the bottom edge."
 		},
 		{
 			"name": "unit_boat",
-			"prompt": "Subject: a small wooden rowboat viewed from the isometric angle, with visible plank seams, a single bench seat, and two small oars resting inside, slightly weathered wood with a painted teal stripe along the gunwale. No people, no water - just the boat hull. Chunky low-poly proportions. Warm cedar planks with the teal accent stripe."
+			"prompt": "Subject: a small cheerful cartoon rowboat viewed from the isometric angle, rounded hull with chunky visible plank seams, a single bench seat, two little oars resting inside, a painted teal stripe along the gunwale, in the spirit of a friendly talking sailboat but with NO face, NO sail, NO people, NO water. Two flat cel tones per surface, thick dark outlines. Warm cedar planks with the teal stripe. Square 1:1 composition, boat centered, about 60% of frame width."
 		}
 	]
 }

@@ -375,7 +375,7 @@ func _wang_hash(v: int) -> int:
 # Flat translucent green wash over the exposed top face — turns bare dirt
 # tops into continuous meadow ground without the chunky 3D mat. Exactly
 # matches the face diamond, so adjacent cells share edges with no seams.
-const GRASS_TINT := Color(0.42, 0.68, 0.24, 0.35)
+const GRASS_TINT := Color(0.34, 0.76, 0.22, 0.42)   # WW spring green
 func _draw_grass_tint(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
 	var col := GRASS_TINT
 	if shadowed:
@@ -1770,6 +1770,9 @@ func _on_cards_drawn(count: int) -> void:
 func _label(pos: Vector2) -> Label:
 	var l := Label.new()
 	l.position = pos
+	# Dark outline keeps HUD text legible against the bright WW sky.
+	l.add_theme_color_override("font_outline_color", Color(0.08, 0.10, 0.16))
+	l.add_theme_constant_override("outline_size", 4)
 	hud.add_child(l)
 	return l
 
