@@ -7,15 +7,27 @@ extends Control
 
 const ANIMATIONS := [
 	{
-		"name": "Ballista Fire",
+		"name": "Ballista Fire (16f)",
 		"frames": [
-			"res://assets/cards/ballista.png",
-			"res://assets/cards/ballista_fire_tense.png",
-			"res://assets/cards/ballista_fire_release.png",
-			"res://assets/cards/ballista_fire_settle.png",
+			"res://assets/cards/ballista_f01.png",
+			"res://assets/cards/ballista_f02.png",
+			"res://assets/cards/ballista_f03.png",
+			"res://assets/cards/ballista_f04.png",
+			"res://assets/cards/ballista_f05.png",
+			"res://assets/cards/ballista_f06.png",
+			"res://assets/cards/ballista_f07.png",
+			"res://assets/cards/ballista_f08.png",
+			"res://assets/cards/ballista_f09.png",
+			"res://assets/cards/ballista_f10.png",
+			"res://assets/cards/ballista_f11.png",
+			"res://assets/cards/ballista_f12.png",
+			"res://assets/cards/ballista_f13.png",
+			"res://assets/cards/ballista_f14.png",
+			"res://assets/cards/ballista_f15.png",
+			"res://assets/cards/ballista_f16.png",
 		],
-		"labels": ["loaded", "tense", "release", "settle"],
-		"times": [0.55, 0.22, 0.16, 0.32],
+		"labels": ["rest", "draw 15%", "draw 30%", "draw 45%", "draw 60%", "draw 75%", "draw 90%", "max draw", "RELEASE", "rebound", "vibration 3", "vibration 2", "vibration 1", "settle + dust", "dust fades", "rest"],
+		"times": [0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.09, 0.045, 0.045, 0.06, 0.06, 0.06, 0.09, 0.09, 0.09],
 	},
 ]
 

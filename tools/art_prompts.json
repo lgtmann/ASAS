@@ -284,6 +284,70 @@
   {
    "name": "ballista_fire_settle",
    "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image — identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain tones, identical outline weight, identical proportions in every part that is not explicitly changed below. This is one frame of a sprite animation, so any unrequested change between frames will cause visible flicker. Background pure flat chroma green #00FF00 edge to edge. CHANGES FOR THIS FRAME ONLY: the twin torsion arms are forward at rest, the bowstring shows a slight double-line vibration blur, the rail is empty (no bolt), a single small dust puff at the platform base. The machine sits back at normal height."
+  },
+  {
+   "name": "ballista_f01",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 1 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the twin torsion arms at rest position, bowstring relaxed and straight, the machine calm."
+  },
+  {
+   "name": "ballista_f02",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 2 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms drawn back about 15% of the way, the string beginning to pull into a shallow V."
+  },
+  {
+   "name": "ballista_f03",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 3 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms drawn back about 30%, string in a shallow V."
+  },
+  {
+   "name": "ballista_f04",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 4 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms drawn back about 45%, string in a deepening V."
+  },
+  {
+   "name": "ballista_f05",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 5 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms drawn back about 60%, string in a clear V, machine starting to brace."
+  },
+  {
+   "name": "ballista_f06",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 6 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms drawn back about 75%, string in a deep V, machine braced."
+  },
+  {
+   "name": "ballista_f07",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 7 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms drawn back about 90%, string in a very deep V, the whole machine slightly compressed downward."
+  },
+  {
+   "name": "ballista_f08",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 8 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms at 100% maximum draw, the deepest possible string V, machine fully compressed and quivering with tension (tiny tension lines at the arm tips)."
+  },
+  {
+   "name": "ballista_f09",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 9 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: RELEASE - the arms snapped fully forward, the string perfectly straight across the front, three short white speed lines bursting forward from the rail tip."
+  },
+  {
+   "name": "ballista_f10",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 10 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms slightly overshot past their forward rest and rebounding, the string shown as a faint double-line blur."
+  },
+  {
+   "name": "ballista_f11",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 11 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms settling at forward rest, the string a strong vibration blur (three faint parallel lines)."
+  },
+  {
+   "name": "ballista_f12",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 12 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms at rest, the string a medium vibration blur (two faint lines)."
+  },
+  {
+   "name": "ballista_f13",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 13 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the arms at rest, the string a faint single vibration ghost line."
+  },
+  {
+   "name": "ballista_f14",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 14 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the machine fully at rest, string straight, one small dust puff at the platform base."
+  },
+  {
+   "name": "ballista_f15",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 15 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the machine at rest, the dust puff fading and drifting."
+  },
+  {
+   "name": "ballista_f16",
+   "prompt": "ANIMATION FRAME TASK: Reproduce the EXACT ballista from the reference image - identical camera angle, identical size and position in the frame, identical wooden platform, identical wood grain, identical proportions in every part not explicitly changed. This is frame 16 of a 16-frame fire animation; unrequested changes cause flicker. The bolt rail is EMPTY in this frame - NO bolt, NO projectile, NO arrow (the projectile is rendered separately by the game engine). Background pure flat chroma green #00FF00 edge to edge. STATE FOR THIS FRAME: the machine completely at rest, string relaxed and straight, identical pose to frame 1."
   }
  ]
 }

@@ -137,7 +137,13 @@ var _building_sprites: Dictionary = {}
 # the in-flight animations keyed by ballista cell.
 var _ballista_frames: Array = []
 var _ballista_anims: Dictionary = {}   # cell -> start time
-const BALLISTA_FRAME_TIMES := [0.22, 0.38, 0.70]   # tense / release / settle ends
+var projectiles_visible: Array = []    # projectiles past their launch delay
+# 16-frame fire cycle: slow draw (1-8), snap (9-10), vibration decay (11-13),
+# settle + dust (14-16). Durations per frame; the projectile launches at the
+# release moment (end of frame 8).
+const BALLISTA_FRAME_DUR := [0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.09,
+		0.045, 0.045, 0.06, 0.06, 0.06, 0.09, 0.09, 0.09]
+const BALLISTA_LAUNCH_DELAY := 0.65    # sum of frames 1-8 + a hair
 
 # --- ambient animation (procedural puppet motion + canvas particles) ---
 var _anim_t: float = 0.0             # global animation clock (secs)
@@ -512,13 +518,11 @@ func _load_terrain_sprites() -> void:
 			"res://assets/cards/dead_tree_1.png", "res://assets/cards/dead_tree_2.png"]:
 		if ResourceLoader.exists(tpath):
 			_tree_variants.append(load(tpath))
-	for fp in ["res://assets/cards/ballista.png",
-			"res://assets/cards/ballista_fire_tense.png",
-			"res://assets/cards/ballista_fire_release.png",
-			"res://assets/cards/ballista_fire_settle.png"]:
+	for fi in range(1, 17):
+		var fp: String = "res://assets/cards/ballista_f%02d.png" % fi
 		if ResourceLoader.exists(fp):
 			_ballista_frames.append(load(fp))
-	if _ballista_frames.size() != 4:
+	if _ballista_frames.size() != 16:
 		_ballista_frames.clear()      # incomplete set — stay static
 	for bkind in ["waterwheel", "storehouse", "village", "trebuchet",
 			"farm", "campsite", "barracks"]:
@@ -745,9 +749,11 @@ func _on_unit_died(u, _grid: Vector3i) -> void:
 	_dying.append({"tex": _unit_sprites.get(u.kind), "team": u.team,
 		"feet": iso_pt(u.draw_pos.x, u.draw_pos.y, u.draw_pos.z), "t0": _anim_t})
 
+var _ballista_shot_pending: bool = false
 func _on_ballista_fired(cell: Vector3i) -> void:
 	if not _ballista_frames.is_empty():
 		_ballista_anims[cell] = _anim_t
+		_ballista_shot_pending = true   # next spade_thrown gets the launch delay
 
 # Fire frames draw on the LIVE layer directly over the cached static sprite —
 # same rect math as the terrain sprite, so they cover it exactly. When the
@@ -756,14 +762,16 @@ func _draw_ballista_anims() -> void:
 	for cell_v in _ballista_anims.keys():
 		var cell: Vector3i = cell_v
 		var t: float = _anim_t - float(_ballista_anims[cell])
-		if t >= BALLISTA_FRAME_TIMES[2]:
+		var frame: int = -1
+		var acc: float = 0.0
+		for fi in BALLISTA_FRAME_DUR.size():
+			acc += BALLISTA_FRAME_DUR[fi]
+			if t < acc:
+				frame = fi
+				break
+		if frame < 0:
 			_ballista_anims.erase(cell)
 			continue
-		var frame: int = 1
-		if t >= BALLISTA_FRAME_TIMES[1]:
-			frame = 3
-		elif t >= BALLISTA_FRAME_TIMES[0]:
-			frame = 2
 		var tex: Texture2D = _ballista_frames[frame]
 		var centre: Vector2 = iso_pt(float(cell.x) + 0.5, float(cell.y) + 0.5, float(cell.z) + 0.5)
 		var w: float = TILE_W * 1.30
@@ -1349,10 +1357,15 @@ func _on_spade_thrown(from_g: Vector3i, to_g: Vector3i, boomerang: bool) -> void
 	# their feet) and aims for the destination cell's feet position.
 	var from_pos: Vector2 = iso_pt(from_g.x + 0.5, float(from_g.y), from_g.z + 0.5) - Vector2(0, 16)
 	var to_pos: Vector2 = iso_pt(to_g.x + 0.5, float(to_g.y), to_g.z + 0.5) - Vector2(0, 16)
+	# Ballista volleys hold their projectile until the release frame.
+	var t0: float = 0.0
+	if _ballista_shot_pending:
+		_ballista_shot_pending = false
+		t0 = -BALLISTA_LAUNCH_DELAY / THROW_DUR
 	projectiles.append({
 		"from": from_pos,
 		"to": to_pos,
-		"t": 0.0,
+		"t": t0,
 		"dur": THROW_DUR,
 		"boomerang": boomerang,
 	})
@@ -1391,6 +1404,7 @@ func _process(delta: float) -> void:
 	# One-way ends at t=1; boomerangs run there-and-back, ending at t=2.
 	projectiles = projectiles.filter(func(p):
 		return p["t"] < (2.0 if p["boomerang"] else 1.0))
+	projectiles_visible = projectiles.filter(func(p): return p["t"] >= 0.0)
 
 	# --- ambient animation clock + particle simulation ---
 	_anim_t += delta
@@ -1464,7 +1478,7 @@ func _on_unit_animated_move(u, from_g: Vector3i, to_g: Vector3i) -> void:
 		_move_anim.erase(u))
 
 func _draw_projectiles() -> void:
-	for p in projectiles:
+	for p in projectiles_visible:
 		var t: float = p["t"]
 		var from_pos: Vector2 = p["from"]
 		var to_pos: Vector2 = p["to"]
@@ -1483,7 +1497,18 @@ func _draw_projectiles() -> void:
 		pos.y -= sin(PI * leg_t) * THROW_ARC
 		# Spinning spade: rotates a few times over the flight.
 		var angle: float = t * TAU * 2.4
-		_draw_spinning_spade(pos, angle)
+		var tex: Texture2D = _texture_for("spade")
+		if tex != null:
+			# WW spade art spinning along the arc, with a soft ground shadow.
+			draw_circle(Vector2(pos.x, pos.y + sin(PI * leg_t) * THROW_ARC + 6.0),
+				7.0, Color(0, 0, 0, 0.18))
+			var w := 34.0
+			var h: float = w * float(tex.get_height()) / float(tex.get_width())
+			draw_set_transform(pos, angle, Vector2.ONE)
+			draw_texture_rect(tex, Rect2(-w * 0.5, -h * 0.5, w, h), false)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		else:
+			_draw_spinning_spade(pos, angle)
 
 func _draw_spinning_spade(pos: Vector2, angle: float) -> void:
 	var dir := Vector2(cos(angle), sin(angle))
