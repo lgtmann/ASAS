@@ -261,6 +261,20 @@ func _ready() -> void:
 	gs.terrain_hit.connect(_on_terrain_hit)
 	gs.ballista_fired.connect(_on_ballista_fired)
 	gs.unit_dug.connect(_on_unit_action.bind("dig"))
+	# --- audio: the signal layer drives every sound ---
+	gs.terrain_hit.connect(func(_cell, mat): Sfx.terrain(mat))
+	gs.unit_damaged.connect(func(_u, _a): Sfx.play("hit", 0.12))
+	gs.unit_died.connect(func(_u, _g): Sfx.play("death", 0.06))
+	gs.unit_attacked.connect(func(_u, _c): Sfx.play("swing", 0.10))
+	gs.unit_threw.connect(func(_u, _c): Sfx.play("throw", 0.08))
+	gs.unit_fished.connect(func(_u): Sfx.play("splash", 0.08))
+	gs.ballista_fired.connect(func(_c): Sfx.play("ballista", 0.05))
+	gs.cards_drawn.connect(func(_n): Sfx.play("card", 0.15))
+	gs.quake_started.connect(func(_cols): Sfx.play("quake", 0.04))
+	gs.area_cleared.connect(func(_n): Sfx.play("victory", 0.0))
+	gs.game_over.connect(func(_w): Sfx.play("death", 0.0, -2.0))
+	gs.unit_animated_move.connect(func(_u, _f, _t): Sfx.play("step", 0.20, -14.0))
+	Sfx.ambient_start()
 	gs.unit_threw.connect(_on_unit_threw)
 	gs.unit_fished.connect(func(u): _start_action(u, "fish", Vector2.RIGHT))
 
@@ -1786,7 +1800,8 @@ func _act_on(cell) -> void:
 		var card = pending_card
 		pending_card = null
 		mode = "move"
-		gs.play_structure_at(card, cell)
+		if gs.play_structure_at(card, cell):
+			Sfx.play("build", 0.08)
 		return
 	if mode == "ritual":
 		var card = pending_card
@@ -1911,6 +1926,7 @@ func _build_hud() -> void:
 		sb.set_corner_radius_all(8)
 		sb.set_content_margin_all(8)
 		end_turn_btn.add_theme_stylebox_override(state[0], sb)
+	end_turn_btn.pressed.connect(func(): Sfx.play("click", 0.05))
 	end_turn_btn.pressed.connect(_on_end_turn)
 	hud.add_child(end_turn_btn)
 
@@ -2190,6 +2206,7 @@ func _open_build_modal() -> void:
 		hit.disabled = not affordable
 		hit.pressed.connect(func():
 			if gs.buy_blueprint(id):
+				Sfx.play("click", 0.05)
 				_open_build_modal())
 		tile.add_child(hit)
 

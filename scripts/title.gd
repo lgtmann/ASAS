@@ -71,6 +71,8 @@ func _build_ui() -> void:
 	play.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
 	add_child(play)
 
+	Sfx.ambient_start()
+
 	var anims := Button.new()
 	anims.text = "See Animations"
 	anims.position = Vector2(660, 564)
@@ -78,6 +80,24 @@ func _build_ui() -> void:
 	anims.add_theme_font_size_override("font_size", 19)
 	anims.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/anim_viewer.tscn"))
 	add_child(anims)
+
+	var vol_label := Label.new()
+	vol_label.text = "Volume"
+	vol_label.add_theme_font_size_override("font_size", 15)
+	vol_label.add_theme_color_override("font_outline_color", Color(0.16, 0.10, 0.05))
+	vol_label.add_theme_constant_override("outline_size", 4)
+	vol_label.position = Vector2(660, 636)
+	add_child(vol_label)
+	var vol := HSlider.new()
+	vol.min_value = 0.0
+	vol.max_value = 1.0
+	vol.step = 0.05
+	vol.value = Sfx.volume
+	vol.position = Vector2(730, 638)
+	vol.size = Vector2(210, 20)
+	vol.value_changed.connect(func(v): Sfx.set_volume(v))
+	vol.drag_ended.connect(func(_ch): Sfx.play("click", 0.0))
+	add_child(vol)
 
 func _decor(path: String, pos: Vector2, sz: Vector2) -> TextureRect:
 	if not ResourceLoader.exists(path):
