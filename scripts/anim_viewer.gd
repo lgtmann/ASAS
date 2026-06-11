@@ -182,7 +182,7 @@ func _ready() -> void:
 # math the game uses. Throw also shows the projectile leg so the two-asset
 # handoff is visible.
 func _draw_action_stage() -> void:
-	var k := 6.0                                    # stage scale vs game pixels
+	var k := 6.0                                    # rescaled from unit_h below
 	var feet := Vector2(action_stage.size.x * 0.42, action_stage.size.y * 0.80)
 	var tt: float = clampf(_act_t, 0.0, 1.0)
 	# Ground line.
@@ -194,16 +194,23 @@ func _draw_action_stage() -> void:
 			Color(0.18, 0.46, 0.82, 0.75))
 		action_stage.draw_line(feet + Vector2(90, -4), feet + Vector2(260, -4),
 			Color(0.07, 0.16, 0.34), 3.0, true)
-	# Body (slight forward lean during the active beat).
-	var body: Texture2D = _act_tex.get("operator")
-	if body != null:
-		var bh := 78.0 * k * 0.7
-		var bw: float = bh * float(body.get_width()) / float(body.get_height())
-		var lean: float = 0.0
-		if _act_t >= 0.0 and _action_type in ["dig", "swing", "throw"]:
-			lean = sin(clampf(tt / 0.6, 0.0, 1.0) * PI) * 10.0
-		action_stage.draw_texture_rect(body,
-			Rect2(feet.x - bw * 0.5 + lean, feet.y - bh, bw, bh), false)
+	# Body: the SAME rig the game draws, at stage height. One scale factor
+	# (unit_h -> k) drives rig and prop together, so proportions are exact.
+	var unit_h := 480.0
+	var game_unit_h: float = 64.0 * 0.85 / OperatorRig.FRAME_ASPECT
+	k = unit_h / game_unit_h
+	if OperatorRig.ready():
+		var pose: Dictionary = {}
+		if _act_t >= 0.0:
+			pose = OperatorRig.action_pose(_action_type, tt, Vector2.RIGHT, 0.0)
+		OperatorRig.draw(action_stage, feet, unit_h, pose, Color.WHITE)
+	else:
+		var body: Texture2D = _act_tex.get("operator")
+		if body != null:
+			var bh := unit_h
+			var bw: float = bh * float(body.get_width()) / float(body.get_height())
+			action_stage.draw_texture_rect(body,
+				Rect2(feet.x - bw * 0.5, feet.y - bh, bw, bh), false)
 	# Spade prop via the shared pose math.
 	var spade: Texture2D = _act_tex.get("spade")
 	if spade != null:

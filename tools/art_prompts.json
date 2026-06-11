@@ -43,7 +43,7 @@
   },
   {
    "name": "unit_operator",
-   "prompt": "Subject: a sturdy cartoon peasant laborer with a big round head, large expressive dark oval eyes and a tiny simple mouth in the Wind Waker facial tradition, wearing a simple earth-brown work tunic with rolled-up sleeves, dark shorts, little leather boots and a small flat cap. Empty hands at sides. Two flat cel tones per surface, thick dark outlines. Earthy browns with one muted teal neckerchief accent. Portrait 2:3 composition, full body centered, character fills about 65% of frame height, feet near the bottom edge."
+   "prompt": "Subject: a SHORT, round little islander worker character wearing a carved wooden ceremonial mask - a simple oval wooden mask covering the whole face, with two dark round eye holes, three painted ochre-red geometric stripes, and a small carved notch pattern at the brow. NO visible face behind the mask. Stubby proportions: big masked head about 40% of total height, short round body, little arms at the sides, short legs, bare feet. Wearing a simple sand-colored cloth wrap tunic with a woven rope belt and a small leaf tucked into the belt. Two flat cel tones per surface, thick dark outlines. Warm sand, driftwood browns, ochre accents. Standing straight, arms relaxed at sides, empty hands. Portrait 2:3 composition, full body centered, character fills about 65% of frame height, feet near the bottom edge."
   },
   {
    "name": "unit_leader",
@@ -364,6 +364,26 @@
   {
    "name": "ballista_spade_loaded",
    "prompt": "EDIT TASK: Reproduce the reference ballista EXACTLY - identical machine, platform, bow, string, crank, identical position and perspective - with ONE single change: the loaded bolt on the rail is REPLACED by a sturdy cartoon digging spade (warm wooden handle, steel blade, thick dark outlines, two flat cel tones) lying along the rail in the same orientation the bolt had, blade pointing where the bolt tip pointed. Background pure flat chroma green #00FF00."
+  },
+  {
+   "name": "op_head",
+   "prompt": "CUTOUT PART TASK: Using the reference character image, isolate ONE body part. Render the part in EXACTLY the same perspective, size, and POSITION WITHIN THE FRAME that it occupies in the reference - do not center it, do not rescale it; it must overlay the reference pixel-for-pixel. Same art style, same outlines, same colors. Where the part connects to neighbouring body parts, end it with a clean rounded edge. Everything that is not the requested part is pure flat chroma green #00FF00. PART: ONLY the head - the carved wooden mask and the head behind it, ending in a clean rounded edge at the neck. No torso, no shoulders."
+  },
+  {
+   "name": "op_torso",
+   "prompt": "CUTOUT PART TASK: Using the reference character image, isolate ONE body part. Render the part in EXACTLY the same perspective, size, and POSITION WITHIN THE FRAME that it occupies in the reference - do not center it, do not rescale it; it must overlay the reference pixel-for-pixel. Same art style, same outlines, same colors. Where the part connects to neighbouring body parts, end it with a clean rounded edge. Everything that is not the requested part is pure flat chroma green #00FF00. PART: ONLY the torso - the tunic-covered round body from the neck down to and including the woven rope belt and the small leaf. NO head, NO arms, NO legs - clean rounded edges at the neck, both shoulders, and below the belt."
+  },
+  {
+   "name": "op_legs",
+   "prompt": "CUTOUT PART TASK: Using the reference character image, isolate ONE body part. Render the part in EXACTLY the same perspective, size, and POSITION WITHIN THE FRAME that it occupies in the reference - do not center it, do not rescale it; it must overlay the reference pixel-for-pixel. Same art style, same outlines, same colors. Where the part connects to neighbouring body parts, end it with a clean rounded edge. Everything that is not the requested part is pure flat chroma green #00FF00. PART: ONLY the lower body - the cloth wrap below the rope belt, both short legs, and the bare feet. NO torso above the belt line - clean edge at the top."
+  },
+  {
+   "name": "op_arm_left",
+   "prompt": "CUTOUT PART TASK: Using the reference character image, isolate ONE body part. Render the part in EXACTLY the same perspective, size, and POSITION WITHIN THE FRAME that it occupies in the reference - do not center it, do not rescale it; it must overlay the reference pixel-for-pixel. Same art style, same outlines, same colors. Where the part connects to neighbouring body parts, end it with a clean rounded edge. Everything that is not the requested part is pure flat chroma green #00FF00. PART: ONLY the character's arm on the LEFT side of the image, from shoulder to hand, ending in a clean rounded edge at the shoulder. No torso, no other arm."
+  },
+  {
+   "name": "op_arm_right",
+   "prompt": "CUTOUT PART TASK: Using the reference character image, isolate ONE body part. Render the part in EXACTLY the same perspective, size, and POSITION WITHIN THE FRAME that it occupies in the reference - do not center it, do not rescale it; it must overlay the reference pixel-for-pixel. Same art style, same outlines, same colors. Where the part connects to neighbouring body parts, end it with a clean rounded edge. Everything that is not the requested part is pure flat chroma green #00FF00. PART: ONLY the character's arm on the RIGHT side of the image, from shoulder to hand, ending in a clean rounded edge at the shoulder. No torso, no other arm."
   }
  ]
 }

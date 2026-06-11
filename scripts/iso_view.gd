@@ -1301,19 +1301,30 @@ func _draw_unit(u, alpha: float) -> void:
 	# auto-loaded — drop a file in, it's used; no code change). Enemies get a
 	# red wash so teams stay readable; capsules remain the fallback.
 	var utex: Texture2D = _unit_sprites.get(u.kind)
-	if utex != null:
+	var umod := Color(1, 1, 1, alpha)
+	if u.team == 1:
+		umod = Color(1.0, 0.62, 0.62, alpha)
+	if u == gs.selected:
+		umod = umod.lightened(0.25)
+	if _hit_flash.has(u):
+		var ft: float = 1.0 - clampf((_anim_t - float(_hit_flash[u])) / FLASH_DUR, 0.0, 1.0)
+		umod = umod.lightened(0.8 * ft)
+		draw_circle(feet - Vector2(0, 14), 6.0 + 14.0 * (1.0 - ft), Color(1, 1, 1, 0.5 * ft))
+	if u.kind == "operator" and OperatorRig.ready():
+		# Rigged operator: 4 body parts, front arm follows the spade action.
+		var uh2: float = TILE_W * UNIT_SPRITE_SCALE / OperatorRig.FRAME_ASPECT
+		var pose: Dictionary = {}
+		var act = _action_anims.get(u)
+		if act != null:
+			var ty: String = String(act["type"])
+			var tt: float = clampf((_anim_t - float(act["t0"])) / float(SpadeActions.DUR.get(ty, 0.6)), 0.0, 1.0)
+			pose = OperatorRig.action_pose(ty, tt, act["dir"], 0.0)
+		OperatorRig.draw(self, feet, uh2, pose, umod)
+		body_top = feet - Vector2(0, uh2 * 0.8)
+	elif utex != null:
 		var uw: float = TILE_W * UNIT_SPRITE_SCALE
 		var uh: float = uw * float(utex.get_height()) / float(utex.get_width())
 		var urect := Rect2(feet.x - uw * 0.5, feet.y - uh * UNIT_GROUND_FRAC, uw, uh)
-		var umod := Color(1, 1, 1, alpha)
-		if u.team == 1:
-			umod = Color(1.0, 0.62, 0.62, alpha)
-		if u == gs.selected:
-			umod = umod.lightened(0.25)
-		if _hit_flash.has(u):
-			var ft: float = 1.0 - clampf((_anim_t - float(_hit_flash[u])) / FLASH_DUR, 0.0, 1.0)
-			umod = umod.lightened(0.8 * ft)
-			draw_circle(feet - Vector2(0, 14), 6.0 + 14.0 * (1.0 - ft), Color(1, 1, 1, 0.5 * ft))
 		draw_texture_rect(utex, urect, false, umod)
 		body_top = feet - Vector2(0, uh * 0.8)   # badges anchor above the sprite
 	else:
