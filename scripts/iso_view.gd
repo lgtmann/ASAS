@@ -2232,21 +2232,35 @@ func _blueprint_art(id: String) -> Texture2D:
 			return load(c)
 	return null
 
-# The hammer menu: every blueprint as an illustrated tile. Buying puts the
-# card straight in your hand (same rules as before); the modal stays open so
-# you can keep shopping, refreshing affordability each purchase.
+# The hammer menu: owned schematics only, affordable builds ranked first,
+# scrollable when the collection outgrows the panel. Buying puts the card in
+# your hand and re-ranks.
 func _open_build_modal() -> void:
-	var bps: Array = GameState.BLUEPRINTS
+	var owned: Array = []
+	for bp in GameState.BLUEPRINTS:
+		if Meta.is_unlocked(String(bp["id"])):
+			owned.append(bp)
+	var can_act: bool = gs.active_team == GameState.TEAM_PLAYER and not gs.is_over
+	var ranked: Array = []
+	for i in owned.size():
+		var bp: Dictionary = owned[i]
+		ranked.append({"bp": bp, "afford": can_act and gs.can_afford_blueprint(bp), "i": i})
+	ranked.sort_custom(func(a, b):
+		if a["afford"] != b["afford"]:
+			return a["afford"]            # affordable first
+		return a["i"] < b["i"])           # stable catalog order within groups
 	var cols := 5
-	var rows: int = int(ceil(float(bps.size()) / float(cols)))
+	var rows: int = maxi(1, int(ceil(float(ranked.size()) / float(cols))))
 	var tile_w := 142.0
 	var tile_h := 148.0
-	var panel := _make_modal(70.0 + rows * tile_h)
-	panel.size = Vector2(40.0 + cols * tile_w, 70.0 + rows * tile_h)
+	var grid_h: float = rows * tile_h
+	var view_h: float = minf(grid_h, 560.0)
+	var panel := _make_modal(74.0 + view_h)
+	panel.size = Vector2(56.0 + cols * tile_w, 74.0 + view_h)
 	panel.position = Vector2((1600.0 - panel.size.x) * 0.5, 90.0)
 	var title := Label.new()
-	title.text = "Build — materials in bank"
-	title.add_theme_font_size_override("font_size", 18)
+	title.text = "Build — materials in bank (more schematics on the title screen)"
+	title.add_theme_font_size_override("font_size", 17)
 	title.position = Vector2(20, 14)
 	panel.add_child(title)
 	var closer := Button.new()
@@ -2255,19 +2269,24 @@ func _open_build_modal() -> void:
 	closer.size = Vector2(36, 30)
 	closer.pressed.connect(_close_modal)
 	panel.add_child(closer)
-	for i in bps.size():
-		var bp: Dictionary = bps[i]
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(20, 54)
+	scroll.size = Vector2(cols * tile_w + 16.0, view_h)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
+	var grid := Control.new()
+	grid.custom_minimum_size = Vector2(cols * tile_w, grid_h)
+	scroll.add_child(grid)
+	for r in ranked.size():
+		var entry: Dictionary = ranked[r]
+		var bp: Dictionary = entry["bp"]
 		var id: String = String(bp["id"])
-		var tx: float = 20.0 + (i % cols) * tile_w
-		var ty: float = 54.0 + float(i / cols) * tile_h
-		var unlocked_schem: bool = Meta.is_unlocked(id)
-		var affordable: bool = unlocked_schem and gs.can_afford_blueprint(bp) \
-				and gs.active_team == GameState.TEAM_PLAYER and not gs.is_over
+		var affordable: bool = entry["afford"]
 		var tile := Panel.new()
-		tile.position = Vector2(tx, ty)
+		tile.position = Vector2((r % cols) * tile_w, float(r / cols) * tile_h)
 		tile.size = Vector2(tile_w - 10.0, tile_h - 10.0)
 		tile.modulate = Color(1, 1, 1) if affordable else Color(0.55, 0.55, 0.55)
-		panel.add_child(tile)
+		grid.add_child(tile)
 		var art: Texture2D = _blueprint_art(id)
 		if art != null:
 			var tr := TextureRect.new()
@@ -2285,12 +2304,10 @@ func _open_build_modal() -> void:
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tile.add_child(nm)
 		var cost := Label.new()
-		cost.text = _bp_cost_label(bp) if unlocked_schem \
-				else "LOCKED — %d coins" % Meta.price(id)
+		cost.text = _bp_cost_label(bp)
 		cost.add_theme_font_size_override("font_size", 12)
 		cost.add_theme_color_override("font_color",
-				Color(0.55, 0.95, 0.55) if affordable
-				else (Color(0.95, 0.55, 0.45) if unlocked_schem else Color(0.85, 0.75, 0.40)))
+				Color(0.55, 0.95, 0.55) if affordable else Color(0.95, 0.55, 0.45))
 		cost.position = Vector2(8, 112)
 		cost.size = Vector2(tile_w - 26.0, 18)
 		cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2302,7 +2319,6 @@ func _open_build_modal() -> void:
 		hit.disabled = not affordable
 		hit.pressed.connect(func():
 			if gs.buy_blueprint(id):
-				Sfx.play("click", 0.05)
 				_open_build_modal())
 		tile.add_child(hit)
 
