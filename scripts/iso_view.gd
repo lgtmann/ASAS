@@ -1541,6 +1541,12 @@ func _process(delta: float) -> void:
 		pan.x += 1.0
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 		pan.x -= 1.0
+	# Right stick pans too (controller play).
+	var jp := Vector2(
+		Input.get_joy_axis(0, JOY_AXIS_RIGHT_X),
+		Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
+	if jp.length() > 0.2:
+		pan -= jp
 	if pan != Vector2.ZERO:
 		position += pan * PAN_SPEED * delta
 		queue_redraw()
@@ -1710,6 +1716,22 @@ func _diamond(center: Vector2, hw: float, hh: float) -> PackedVector2Array:
 # ---------------------------------------------------------------- input / picking
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton and event.pressed:
+		match event.button_index:
+			JOY_BUTTON_Y:
+				_on_end_turn()
+			JOY_BUTTON_X:
+				if _modal == null:
+					_open_build_modal()
+				else:
+					_close_modal()
+			JOY_BUTTON_LEFT_SHOULDER:
+				_zoom_at(Vector2(800, 450), 1.0 / ZOOM_STEP)
+			JOY_BUTTON_RIGHT_SHOULDER:
+				_zoom_at(Vector2(800, 450), ZOOM_STEP)
+			JOY_BUTTON_START:
+				get_tree().change_scene_to_file("res://scenes/title.tscn")
+		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_MIDDLE:
 			_panning = event.pressed

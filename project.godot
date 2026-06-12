@@ -25,6 +25,7 @@ window/stretch/mode="canvas_items"
 [autoload]
 
 Sfx="*res://scripts/audio.gd"
+Pad="*res://scripts/pad.gd"
 
 [gui]
 
