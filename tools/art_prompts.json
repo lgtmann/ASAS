@@ -392,6 +392,10 @@
   {
    "name": "cloud_2",
    "prompt": "Subject: a single puffy cartoon cumulus cloud in the iconic Wind Waker sky style, a DIFFERENT silhouette: a rounder, taller mass of four big overlapping lobes with one small detached puff drifting at its right side, flat white with ONE pale blue-grey hard-edged cel shadow underside, thick dark-blue outline. Square 1:1 composition, cloud centered, filling about 70% of the frame width and 50% of the height, chroma green elsewhere."
+  },
+  {
+   "name": "unit_flud",
+   "prompt": "Subject: FLUD, a mystical cartoon otter guru - a larger, imposing otter standing upright with ancient knowing eyes, a long braided beard of kelp, wearing a flowing deep ocean-blue robe with wave-curl patterns and a carved coral crown, holding a twisted driftwood staff topped with a glowing sphere of swirling water, three water droplets floating around him. Two flat cel tones per surface, thick dark outlines. Deep blues, sea-greens, warm otter brown, pale glow accents. Portrait 2:3 composition, full body centered, about 70% of frame height, feet near the bottom edge."
   }
  ]
 }

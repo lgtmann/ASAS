@@ -259,6 +259,7 @@ func _ready() -> void:
 	gs.unit_animated_move.connect(_on_unit_animated_move)
 	gs.quake_started.connect(_on_quake_started)
 	gs.area_cleared.connect(_on_area_cleared)
+	gs.campaign_won.connect(func(): _show_end_screen(true))
 	gs.unit_attacked.connect(_on_unit_attacked)
 	gs.unit_damaged.connect(_on_unit_damaged)
 	gs.unit_died.connect(_on_unit_died)
@@ -1365,6 +1366,7 @@ func _draw_unit(u, alpha: float) -> void:
 			"wizard": col = col.lerp(Color(0.62, 0.25, 0.85), 0.7)
 			"king": col = col.lerp(Color(0.95, 0.75, 0.10), 0.7)
 			"otter": col = col.lerp(Color(0.25, 0.60, 0.55), 0.7)
+			"flud": col = col.lerp(Color(0.20, 0.35, 0.80), 0.75)
 			"boat": col = col.lerp(Color(0.40, 0.30, 0.20), 0.5)
 	if u == gs.selected:
 		col = col.lightened(0.25)
@@ -1450,7 +1452,7 @@ func _draw_unit(u, alpha: float) -> void:
 	if font != null:
 		draw_string(font, body_top - Vector2(8, 6), "%d" % u.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 		# Kind initial for special units (W / R / P) on the body.
-		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king", "boat", "otter"]:
+		if u.kind in ["warrior", "javelin", "plow", "wolf", "wizard", "king", "boat", "otter", "flud"]:
 			draw_string(font, feet + Vector2(-4, -body_h * 0.45),
 				u.kind.substr(0, 1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		var badge_pos: Vector2 = feet + Vector2(-14, -body_h - 24)
@@ -1767,12 +1769,12 @@ func _on_right_click(p: Vector2) -> void:
 		var target = _pick_unit(p)
 		if target != null and target.team != 0 and target.is_alive():
 			var d: int = gs._cheb3(sel.grid, target.grid)
-			# Converted wolves (and other spadeless beasts) bite when adjacent.
+			# Spadeless melee: wolves bite for 2, bare hands punch for 1.
 			if sel.spade == null:
-				if sel.kind == "wolf" and d <= 1:
-					gs.bite(sel, target)
+				if d <= 1:
+					gs.bite(sel, target, 2 if sel.kind == "wolf" else 1)
 				else:
-					gs.notice.emit("No spade to attack with.")
+					gs.notice.emit("No spade — get adjacent to punch (1 dmg).")
 				return
 			var reach: int = gs.throw_range_for(sel)
 			if d <= 1:
@@ -2525,17 +2527,55 @@ func _run_ai_turn(team: int) -> void:
 
 func _on_game_over(winner_team: int) -> void:
 	_ai_running = false
-	var msg: String
-	match winner_team:
-		GameState.TEAM_PLAYER: msg = "GAME OVER — You win!"
-		GameState.TEAM_ENEMY: msg = "GAME OVER — Enemy wins."
-		_: msg = "GAME OVER — draw (mutual annihilation)."
-	if status_label != null:
-		status_label.text = msg
 	if sim_btn != null:
 		sim_btn.button_pressed = false
 		sim_btn.text = "Sim: OFF"
 		gs.sim_mode = false
+	if winner_team == GameState.TEAM_ENEMY and not gs.sim_mode:
+		_show_end_screen(false)
+
+# Full-screen run summary — victory (FLUD beaten) or defeat (team wiped).
+func _show_end_screen(won: bool) -> void:
+	Sfx.play("victory" if won else "death", 0.0, 0.0)
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.05, 0.04, 0.03, 0.72)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud.add_child(overlay)
+	var panel := Panel.new()
+	panel.size = Vector2(560, 420)
+	panel.position = Vector2((1600 - 560) * 0.5, 200)
+	overlay.add_child(panel)
+	var title := Label.new()
+	title.text = "VICTORY — FLUD HAS FALLEN" if won else "DEFEAT"
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color",
+		Color(0.55, 0.95, 0.55) if won else Color(0.95, 0.55, 0.45))
+	title.position = Vector2(0, 28)
+	title.size = Vector2(560, 40)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	panel.add_child(title)
+	var deck_n: int = gs.draw_pile.size() + gs.hand.size() + gs.discard.size()
+	var stats := Label.new()
+	stats.text = "Areas cleared: %d\nTurns taken: %d\nDeck size: %d cards\n\nCoins earned this run: %d\nPurse total: %d" % 		[gs.area if won else gs.area - 1, gs.turn, deck_n, gs.run_coins, Meta.coins]
+	stats.add_theme_font_size_override("font_size", 19)
+	stats.position = Vector2(0, 100)
+	stats.size = Vector2(560, 200)
+	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	panel.add_child(stats)
+	var sub := Label.new()
+	sub.text = "Spend coins on schematics from the title screen." if won 		else "Your coins are banked — buy schematics and run it back."
+	sub.add_theme_font_size_override("font_size", 14)
+	sub.position = Vector2(0, 296)
+	sub.size = Vector2(560, 22)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	panel.add_child(sub)
+	var back := Button.new()
+	back.text = "Return to Title"
+	back.position = Vector2(180, 340)
+	back.size = Vector2(200, 50)
+	back.add_theme_font_size_override("font_size", 18)
+	back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/title.tscn"))
+	panel.add_child(back)
 
 func _on_cards_drawn(count: int) -> void:
 	# Recorded here; the actual slide-in happens during the next _refresh_context

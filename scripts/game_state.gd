@@ -14,6 +14,7 @@ signal game_over(winner_team)           # fires once when a team is wiped
 signal unit_animated_move(unit, from_grid, to_grid)   # iso_view tweens draw_pos
 signal quake_started(columns)           # Array[Vector2i] of (x, z) columns to shake
 signal area_cleared(area_num)           # all enemies dead — offer reward + expansion
+signal campaign_won()                   # FLUD defeated — the run is complete
 signal unit_attacked(attacker, target_grid)  # melee swing/bite — lunge animation
 signal unit_damaged(unit, amount)            # any damage — hit flash + number
 signal unit_died(unit, grid)                 # death — tip-over ghost animation
@@ -101,6 +102,7 @@ var is_over: bool = false
 # a special-unit card, then a choice of expansion direction.
 var area: int = 1
 var _area_clear_emitted: bool = false
+var run_coins: int = 0                  # coins earned this run (for the summary)
 
 # Overworld: after the intro area you pick a governor's domain. Each branch is
 # an intro area (wizard miniboss) then the governor boss. Beat both governors
@@ -221,9 +223,11 @@ func _spawn_enemy_force() -> void:
 		wiz.kind = "wizard"
 		wiz.hp = 8 + 2 * area
 		wiz.max_hp = wiz.hp
-		var kinds := ["wolf", "warrior", "javelin", "operator"]
+		# Graduated roster: early intros field grunts; elites join later.
+		# (Autoplay: the old wolf/warrior/javelin opener was a 12/12 wipe.)
+		var ramp := ["operator", "wolf", "operator", "warrior", "javelin", "wolf", "warrior"]
 		for i in (1 + area):
-			var kind: String = kinds[i % kinds.size()]
+			var kind: String = ramp[i % ramp.size()]
 			var m = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), kind != "wolf")
 			m.kind = kind
 			if kind == "wolf":
@@ -287,18 +291,32 @@ func _spawn_otter_force() -> void:
 
 # Flud, the guru — full battle comes later. For now: a brutal mixed vanguard.
 func _spawn_flud_force() -> void:
-	notice.emit("FLUD's domain — the waters rise… (full battle coming soon)")
+	notice.emit("FLUD's domain — the waters rise…")
 	world.add_river()
 	var flud = _spawn_unit(TEAM_ENEMY, _free_spot_near(2, 2), false)
-	flud.kind = "wizard"
-	flud.hp = 24
-	flud.max_hp = 24
-	for i in 3:
-		var m = _spawn_unit(TEAM_ENEMY, _free_spot_near(3, 3), i > 0)
-		m.kind = ["wolf", "warrior", "javelin"][i]
-		if m.kind == "wolf":
-			m.hp = 4
-			m.max_hp = 4
+	flud.kind = "flud"
+	flud.hp = 30
+	flud.max_hp = 30
+	for i in 2:
+		var jt = _spawn_unit(TEAM_ENEMY, _free_spot_near(3, 3), true)
+		jt.kind = "javelin"
+		if jt.spade != null:
+			jt.spade.handle = "spade_boomerang"
+	var wf = _spawn_unit(TEAM_ENEMY, _free_spot_near(4, 2), false)
+	wf.kind = "wolf"
+	wf.hp = 4
+	wf.max_hp = 4
+	var placed: int = 0
+	for w_v in world.water_flow.keys():
+		if placed >= 2:
+			break
+		var w: Vector3i = w_v
+		if unit_at(w) == null:
+			var b = _spawn_unit(TEAM_ENEMY, w, false)
+			b.kind = "boat"
+			b.hp = 4
+			b.max_hp = 4
+			placed += 1
 
 # King of the Hill: a tower-building boss guarded by javelin throwers and
 # crewed ballistas. Approach and the ranged screen shreds you; hang back and
@@ -334,6 +352,7 @@ func start_from_save(data: Dictionary) -> void:
 		for k in bosses_defeated:
 			bosses_defeated[k] = bool(bd.get(k, false))
 	turn = int(data.get("turn", 1))
+	run_coins = int(data.get("run_coins", 0))
 	wood[0] = int(data.get("wood", 0))
 	earth[0] = int(data.get("earth", 0))
 	stone[0] = int(data.get("stone", 0))
@@ -425,15 +444,24 @@ func _check_game_over() -> void:
 	# Wiping the enemy CLEARS THE AREA (campaign continues) instead of ending.
 	if team_alive_count(TEAM_ENEMY) == 0 and not _area_clear_emitted:
 		_area_clear_emitted = true
-		var coin_reward: int = 3
+		# FLUD down = campaign victory: big purse bonus, the run completes.
 		if branch == "flud" and stage_in_branch == 2:
-			coin_reward += 10
-		elif stage_in_branch == 2:
+			is_over = true
+			var bonus: int = 13 + 25
+			Meta.add_coins(bonus)
+			run_coins += bonus
+			Meta.RunSave.clear()
+			notice.emit("FLUD HAS FALLEN — the run is complete! +%d coins." % bonus)
+			campaign_won.emit()
+			return
+		var coin_reward: int = 3
+		if stage_in_branch == 2:
 			coin_reward += 5
 		if stage_in_branch == 2 and bosses_defeated.has(branch):
 			bosses_defeated[branch] = true
 			notice.emit("The governor of the %s has fallen!" % branch)
 		Meta.add_coins(coin_reward)
+		run_coins += coin_reward
 		notice.emit("Area %d cleared!  +%d coins (purse: %d)" % [area, coin_reward, Meta.coins])
 		area_cleared.emit(area)
 
@@ -494,17 +522,57 @@ func ai_step(team: int) -> bool:
 						u.acted = true
 						return true
 			continue                      # the Otter holds the riverbank
-		# Wizard miniboss: summon a wolf instead of fighting (capped force).
+		# FLUD: the guru cycles both governors' powers — flood the land,
+		# summon riders, raise his throne ever higher.
+		if u.kind == "flud":
+			if not u.acted:
+				match turn % 3:
+					0:
+						if _otter_extend_river(u, target):
+							u.acted = true
+							notice.emit("FLUD commands the waters!")
+							return true
+					1:
+						if int(u.task.get("summons", 0)) < 5 and team_alive_count(team) < 9:
+							var spot: Vector3i = _free_spot_near(u.grid.x, u.grid.z)
+							if unit_at(spot) == null and world.is_standable(spot):
+								var minion = _spawn_unit(team, spot, false)
+								minion.kind = "wolf"
+								minion.hp = 4
+								minion.max_hp = 4
+								u.task["summons"] = int(u.task.get("summons", 0)) + 1
+								u.acted = true
+								notice.emit("FLUD summons a beast!")
+								_emit_changed()
+								return true
+					_:
+						if u.grid.y + 1 < world.SY:
+							var stand: Vector3i = u.grid
+							u.grid = stand + Vector3i(0, 1, 0)
+							u.draw_pos = Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
+							world.set_material(stand, VoxelWorld.Mat.EARTH)
+							u.acted = true
+							notice.emit("FLUD raises his throne!")
+							_emit_changed()
+							return true
+			continue
+		# Wizard miniboss: summon a wolf instead of fighting — every OTHER
+		# turn, with a tighter force cap (every-turn summons proved lethal in
+		# autoplay balance runs: 12/12 baseline deaths at the first wizard).
 		if u.kind == "wizard":
-			if not u.acted and team_alive_count(team) < 9:
+			# Summon budget: 3 per fight — bounded fights are winnable fights
+			# (autoplay: unbounded summons = guaranteed attrition loss).
+			var used: int = int(u.task.get("summons", 0))
+			if not u.acted and used < 3 and team_alive_count(team) < 7 and turn % 2 == 0:
 				var spot: Vector3i = _free_spot_near(u.grid.x, u.grid.z)
 				if unit_at(spot) == null and world.is_standable(spot):
 					var minion = _spawn_unit(team, spot, false)
 					minion.kind = "wolf"
 					minion.hp = 4
 					minion.max_hp = 4
+					u.task["summons"] = used + 1
 					u.acted = true
-					notice.emit("The wizard summons a wolf!")
+					notice.emit("The wizard summons a wolf! (%d/3)" % (used + 1))
 					_emit_changed()
 					return true
 			continue                          # wizards don't chase
@@ -513,7 +581,7 @@ func ai_step(team: int) -> bool:
 			if u.spade != null and u.kind != "wolf":
 				swing_at(u, target.grid)
 			else:
-				bite(u, target)
+				bite(u, target, 2 if u.kind == "wolf" else 1)
 			return true
 		# Javelin barbarians attack from range (their spade boomerangs back).
 		if u.kind == "javelin" and u.spade != null and not u.acted \
@@ -522,8 +590,6 @@ func ai_step(team: int) -> bool:
 			return true
 		if u.moved:
 			continue
-		if u.spade == null and u.kind != "wolf" and u.kind != "boat":
-			continue                          # spadeless humanoids hold position
 		if _adjacent_own_ballista(u):
 			continue                          # gunners hold their post
 		var moves: Array = move_targets(u)
@@ -1263,7 +1329,7 @@ func play_ritual_at(card, cell: Vector3i) -> bool:
 			if victim == null or victim.team != TEAM_ENEMY:
 				notice.emit("No enemy there to convert.")
 				return false
-			if victim.kind in ["king", "otter", "wizard"]:
+			if victim.kind in ["king", "otter", "wizard", "flud"]:
 				notice.emit("%s is too strong-willed to convert!" % victim.kind.capitalize())
 				return false
 			victim.team = TEAM_PLAYER
@@ -1604,15 +1670,16 @@ func _consume_action(u) -> bool:
 	u.acted = true
 	return true
 
-# Innate melee for spadeless beasts (wolves) and converted units: 2 damage.
-func bite(u, target) -> void:
+# Innate melee: wolves bite for 2; spadeless humanoids punch for 1, so an
+# unarmed mob can still swarm (autoplay exposed armies of idle pacifists).
+func bite(u, target, dmg: int = 2) -> void:
 	if target == null or not target.is_alive():
 		return
 	if not _consume_action(u):
 		return
 	unit_attacked.emit(u, target.grid)
-	_damage(target, 2)
-	notice.emit("%s attacks for 2." % u.kind.capitalize())
+	_damage(target, dmg)
+	notice.emit("%s attacks for %d." % [u.kind.capitalize(), dmg])
 	_emit_changed()
 
 func begin_turn() -> void:

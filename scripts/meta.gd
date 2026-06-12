@@ -106,6 +106,7 @@ class RunSave:
 			"stage_in_branch": gs.stage_in_branch,
 			"bosses_defeated": gs.bosses_defeated,
 			"turn": gs.turn,
+			"run_coins": gs.run_coins,
 			"wood": int(gs.wood[0]), "earth": int(gs.earth[0]),
 			"stone": int(gs.stone[0]), "oil": int(gs.oil[0]),
 			"passives": gs.passives.keys(),
