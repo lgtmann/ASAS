@@ -184,6 +184,8 @@ var discard_pile_label: Label
 var sim_btn: Button
 var restart_btn: Button
 var _res_labels: Dictionary = {}       # resource kind -> count Label (sidebar)
+var objective_label: Label             # persistent goal chip, top centre
+const HINT_CONTROLS := "Click a unit to select; click a highlighted cell to act.  RIGHT-CLICK an enemy to attack (swing adjacent / throw at range); right-click elsewhere cancels.  Wheel zooms; Shift+wheel scrolls levels."
 var build_modal_btn: Button
 var _modal: Panel = null               # active modal (choice / harvest confirm)
 var context_buttons: Array = []
@@ -291,6 +293,7 @@ func _ready() -> void:
 	# Player base is in the near corner — pan the camera so it starts centred.
 	if gs.selected != null:
 		_center_on(gs.selected.grid)
+	_show_area_banner()
 	queue_redraw()
 	_maybe_spawn_showcase()
 	_maybe_spawn_built_showcase()
@@ -1907,9 +1910,11 @@ func _build_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
 	info_label = _label(Vector2(12, 10))
+	info_label.size = Vector2(540, 24)
+	info_label.clip_text = true
 	status_label = _label(Vector2(12, 36))
 	hint_label = _label(Vector2(12, 62))
-	hint_label.text = "Click a unit to select; click a highlighted cell to act.  RIGHT-CLICK an enemy to attack (swing adjacent / throw at range); right-click elsewhere cancels.  Wheel zooms; Shift+wheel scrolls levels."
+	hint_label.text = HINT_CONTROLS
 	end_turn_btn = Button.new()
 	end_turn_btn.text = "End Turn"
 	end_turn_btn.position = Vector2(12, 88)
@@ -1944,6 +1949,18 @@ func _build_hud() -> void:
 	restart_btn.size = Vector2(96, 32)
 	restart_btn.pressed.connect(func(): get_tree().reload_current_scene())
 	hud.add_child(restart_btn)
+
+	# Objective chip: always-visible goal + live enemy counter, top centre.
+	var obj_panel := Panel.new()
+	obj_panel.position = Vector2(560, 8)
+	obj_panel.size = Vector2(480, 36)
+	hud.add_child(obj_panel)
+	objective_label = Label.new()
+	objective_label.position = Vector2(0, 6)
+	objective_label.size = Vector2(480, 24)
+	objective_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	objective_label.add_theme_font_size_override("font_size", 16)
+	obj_panel.add_child(objective_label)
 
 	# --- Right sidebar: resource bank, build button, deck piles ---
 	var side_x := 1492.0
@@ -2004,6 +2021,67 @@ func _build_hud() -> void:
 	hud.add_child(level_dn_btn)
 	_refresh_level_label()
 
+
+# State-driven onboarding hint for the opening turns ("" once rolling).
+func _current_hint() -> String:
+	if gs.is_over or gs.active_team != GameState.TEAM_PLAYER or gs.turn > 8:
+		return ""
+	var have_op := false
+	var unarmed_op := false
+	for u in gs.units:
+		if u.is_alive() and u.team == 0 and u.kind == "operator":
+			have_op = true
+			if u.spade == null:
+				unarmed_op = true
+	var op_card := false
+	var spade_card := false
+	for c in gs.hand:
+		if c["id"] == "operator":
+			op_card = true
+		elif c["id"] == "spade":
+			spade_card = true
+	if not have_op and op_card:
+		return "Play an Operator card, then click a highlighted tile next to your leader to deploy."
+	if unarmed_op and spade_card:
+		return "Select a Spade card, then click an operator to arm them."
+	if have_op and int(gs.wood[0]) == 0 and int(gs.earth[0]) == 0:
+		return "Operators harvest: select one, then click a tree to chop or use Dig on the ground."
+	if int(gs.wood[0]) + int(gs.earth[0]) >= 2:
+		return "Spend materials in the Build menu (hammer, right sidebar) — bought cards go to your hand."
+	return ""
+
+# Big fading banner announcing the area + objective; shown on entry.
+func _show_area_banner() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--screenshot="):
+			return        # keep harness shots clean
+	var title := Label.new()
+	title.text = gs.area_title()
+	title.add_theme_font_size_override("font_size", 54)
+	title.add_theme_color_override("font_outline_color", Color(0.16, 0.10, 0.05))
+	title.add_theme_constant_override("outline_size", 12)
+	title.position = Vector2(0, 300)
+	title.size = Vector2(1600, 70)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(title)
+	var sub := Label.new()
+	sub.text = gs.objective_text()
+	sub.add_theme_font_size_override("font_size", 24)
+	sub.add_theme_color_override("font_outline_color", Color(0.16, 0.10, 0.05))
+	sub.add_theme_constant_override("outline_size", 7)
+	sub.position = Vector2(0, 370)
+	sub.size = Vector2(1600, 34)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(sub)
+	for l in [title, sub]:
+		l.modulate = Color(1, 1, 1, 0)
+		var tw := create_tween()
+		tw.tween_property(l, "modulate:a", 1.0, 0.45)
+		tw.tween_interval(2.4)
+		tw.tween_property(l, "modulate:a", 0.0, 0.8)
+		tw.tween_callback(l.queue_free)
 
 # ---------------------------------------------------------------- modals
 
@@ -2122,6 +2200,7 @@ func _advance_area(direction: String) -> void:
 	if leader != null:
 		_select(leader)
 		_center_on(leader.grid)
+	_show_area_banner()
 
 # Art for a blueprint tile: structures use their placed art, buildings their
 # building sprite, the boat its unit sprite, dirt walls the earth card.
@@ -2391,6 +2470,19 @@ func _refresh_info() -> void:
 			who, mode if mode != "" else "—"]
 	if end_turn_btn != null:
 		end_turn_btn.disabled = gs.is_over or _ai_running or gs.active_team != GameState.TEAM_PLAYER
+	if objective_label != null:
+		var n_enemies: int = gs.team_alive_count(GameState.TEAM_ENEMY)
+		objective_label.text = "%s   (%d %s left)" % [gs.objective_text(),
+			n_enemies, "enemy" if n_enemies == 1 else "enemies"]
+	# Contextual hint for the opening turns; falls back to the controls line.
+	if hint_label != null:
+		var hint: String = _current_hint()
+		if hint != "":
+			hint_label.text = "TIP: " + hint
+			hint_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.6))
+		else:
+			hint_label.text = HINT_CONTROLS
+			hint_label.add_theme_color_override("font_color", Color(0.98, 0.96, 0.9))
 	# Sidebar resource counts.
 	for kind in _res_labels:
 		var bank: Array = gs.get(kind)

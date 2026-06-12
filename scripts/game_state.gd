@@ -109,6 +109,26 @@ var branch: String = ""                 # "", "hills", "riverlands", "flud"
 var stage_in_branch: int = 0            # 0 = intro/none, 1 = branch intro, 2 = boss
 var bosses_defeated: Dictionary = {"hills": false, "riverlands": false}
 
+# Display name of the current area, for the entry banner.
+func area_title() -> String:
+	if branch == "flud" and stage_in_branch == 2:
+		return "FLUD's Domain"
+	if stage_in_branch == 2:
+		return "The King's Seat" if branch == "hills" else "The Otter's Den"
+	if stage_in_branch == 1:
+		return "The Hills" if branch == "hills" else "The Riverlands"
+	return "The Meadow"
+
+# What the player must do here, for the banner + objective chip.
+func objective_text() -> String:
+	if branch == "flud" and stage_in_branch == 2:
+		return "Defeat FLUD"
+	if stage_in_branch == 2:
+		return "Defeat the King of the Hill" if branch == "hills" else "Defeat The Otter"
+	if stage_in_branch == 1:
+		return "Defeat the wizard and its warband"
+	return "Defeat all enemies"
+
 # Where can the player expand right now?
 func expansion_options() -> Array:
 	if stage_in_branch == 1 and branch != "":
