@@ -384,6 +384,14 @@
   {
    "name": "op_arm_right",
    "prompt": "CUTOUT PART TASK: Using the reference character image, isolate ONE body part. Render the part in EXACTLY the same perspective, size, and POSITION WITHIN THE FRAME that it occupies in the reference - do not center it, do not rescale it; it must overlay the reference pixel-for-pixel. Same art style, same outlines, same colors. Where the part connects to neighbouring body parts, end it with a clean rounded edge. Everything that is not the requested part is pure flat chroma green #00FF00. PART: ONLY the character's arm on the RIGHT side of the image, from shoulder to hand, ending in a clean rounded edge at the shoulder. No torso, no other arm."
+  },
+  {
+   "name": "cloud_1",
+   "prompt": "Subject: a single puffy cartoon cumulus cloud in the iconic Wind Waker sky style: a wide soft mass of five or six overlapping round lobes, flat white on top with ONE pale blue-grey hard-edged cel shadow tone across the underside, thick dark-blue outline around the silhouette, gently flat bottom. Square 1:1 composition, cloud centered, filling about 75% of the frame width and 45% of the height, floating with empty chroma green everywhere else."
+  },
+  {
+   "name": "cloud_2",
+   "prompt": "Subject: a single puffy cartoon cumulus cloud in the iconic Wind Waker sky style, a DIFFERENT silhouette: a rounder, taller mass of four big overlapping lobes with one small detached puff drifting at its right side, flat white with ONE pale blue-grey hard-edged cel shadow underside, thick dark-blue outline. Square 1:1 composition, cloud centered, filling about 70% of the frame width and 50% of the height, chroma green elsewhere."
   }
  ]
 }

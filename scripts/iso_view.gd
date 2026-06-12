@@ -131,6 +131,8 @@ var _terrain_sprites: Dictionary = {}
 var _tree_variants: Array = []
 # Small decoration sprites scattered deterministically on grass cells.
 var _sprout_variants: Array = []
+# Puffy cloudbank sprites drawn over unexplored (fogged) surface cells.
+var _cloud_sprites: Array = []
 # Building art keyed by building kind (gs.buildings[cell].kind).
 var _building_sprites: Dictionary = {}
 # Ballista fire animation: 4 sprite frames (loaded/tense/release/settle) and
@@ -550,6 +552,9 @@ func _load_terrain_sprites() -> void:
 		var bpath: String = "res://assets/cards/building_%s.png" % bkind
 		if ResourceLoader.exists(bpath):
 			_building_sprites[bkind] = load(bpath)
+	for cp in ["res://assets/cards/cloud_1.png", "res://assets/cards/cloud_2.png"]:
+		if ResourceLoader.exists(cp):
+			_cloud_sprites.append(load(cp))
 	for sp in ["res://assets/cards/sprout_tall.png",
 			"res://assets/cards/sprout_bush.png",
 			"res://assets/cards/sprout_flower.png"]:
@@ -593,6 +598,23 @@ func _draw_tree(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> vo
 		var d: float = 1.0 - SHADOW_DARKEN
 		tint = Color(d, d, d, alpha)
 	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
+
+# A puff (or two) of cloud over a fogged surface cell. Hash-driven variant,
+# size, and jitter; neighbouring puffs overlap into a continuous bank. Lives
+# on the cached terrain layer, so the bank only re-renders when vision grows.
+func _draw_fog_cloud(c: Vector3i, alpha: float) -> void:
+	var h: int = _wang_hash(c.x * 198491317 + c.z * 6542989)
+	var top: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 1.6, float(c.z) + 0.5)
+	var n_puffs: int = 1 + (h % 2)
+	for i in n_puffs:
+		var hh: int = _wang_hash(h + i * 7919)
+		var tex: Texture2D = _cloud_sprites[hh % _cloud_sprites.size()]
+		var w: float = TILE_W * (1.6 + float((hh >> 8) % 100) / 100.0)
+		var ch: float = w * float(tex.get_height()) / float(tex.get_width())
+		var jx: float = (float((hh >> 12) % 100) / 100.0 - 0.5) * TILE_W * 0.7
+		var jy: float = (float((hh >> 19) % 100) / 100.0 - 0.5) * TILE_H * 0.8
+		var rect := Rect2(top.x - w * 0.5 + jx, top.y - ch * 0.5 + jy, w, ch)
+		_draw_canvas.draw_texture_rect(tex, rect, false, Color(1, 1, 1, 0.93 * alpha))
 
 # Avalanche hash — decorrelates neighbouring cells and slots. The previous
 # multiplicative hash had linear structure that made the scatter form visible
@@ -1028,6 +1050,13 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var shake := Vector2(0, _quake_offset(c))
 	var pattern: int = _cell_pattern(c, mat)
 	var shadowed: bool = _is_shadowed(c)
+	# Unexplored surface: the grey hint-cube plus a puffy cloudbank on top —
+	# the fog of war reads as actual cloud cover that parts as vision spreads.
+	if not seen_it and not _cloud_sprites.is_empty() \
+			and not world.is_solid(c + Vector3i(0, 1, 0)):
+		_draw_big_cube(c, mat, false, alpha, shake, shadowed)
+		_draw_fog_cloud(c, alpha)
+		return
 	# Tree: ONE tall sprite per column, drawn from the BOTTOM cell only —
 	# upper tree cells are part of the same image and skipped here.
 	if mat == VoxelWorld.Mat.TREE and seen_it and not _tree_variants.is_empty():
