@@ -190,6 +190,7 @@ func start() -> void:
 	_spawn_enemy_force()
 	selected = leader
 	recompute_vision()
+	Meta.RunSave.write(self)
 	begin_turn()
 
 # Whether the area just played grants MAGIC rewards (miniboss / governor /
@@ -321,6 +322,69 @@ func _spawn_king_force() -> void:
 		var gunner = _spawn_unit(TEAM_ENEMY, _free_spot_near(bspot.x, bspot.z), true)
 		gunner.kind = "operator"
 
+# Resume a saved run: campaign position + player force + deck, on a freshly
+# generated map (a save is always taken at an area's start).
+func start_from_save(data: Dictionary) -> void:
+	randomize()
+	area = int(data.get("area", 1))
+	branch = String(data.get("branch", ""))
+	stage_in_branch = int(data.get("stage_in_branch", 0))
+	var bd: Variant = data.get("bosses_defeated", {})
+	if bd is Dictionary:
+		for k in bosses_defeated:
+			bosses_defeated[k] = bool(bd.get(k, false))
+	turn = int(data.get("turn", 1))
+	wood[0] = int(data.get("wood", 0))
+	earth[0] = int(data.get("earth", 0))
+	stone[0] = int(data.get("stone", 0))
+	oil[0] = int(data.get("oil", 0))
+	for pid in data.get("passives", []):
+		passives[String(pid)] = true
+	# Deck.
+	draw_pile.clear()
+	hand.clear()
+	discard.clear()
+	for pile_pair in [["draw_pile", draw_pile], ["hand", hand], ["discard", discard]]:
+		for cd in data.get(pile_pair[0], []):
+			var card := _make_card(String(cd["id"]), String(cd["title"]),
+				int(cd["cost"]), String(cd["category"]), String(cd["blurb"]))
+			if bool(cd.get("bought", false)):
+				card["bought"] = true
+			pile_pair[1].append(card)
+	# Player force in the near corner.
+	var corner_x: int = world.SX - 3
+	var corner_z: int = world.SZ - 3
+	var leader = null
+	for ud in data.get("units", []):
+		var u = _spawn_unit(TEAM_PLAYER, _free_spot_near(corner_x, corner_z), false)
+		u.kind = String(ud.get("kind", "operator"))
+		u.hp = int(ud.get("hp", 5))
+		u.max_hp = int(ud.get("max_hp", 5))
+		u.strength = bool(ud.get("strength", false))
+		u.endurance = bool(ud.get("endurance", false))
+		u.dual_wield = bool(ud.get("dual_wield", false))
+		u.hand_eye = bool(ud.get("hand_eye", false))
+		u.has_fishing_pole = bool(ud.get("fishing_pole", false))
+		var sd: Variant = ud.get("spade")
+		if sd is Dictionary:
+			var sp := Spade.new()
+			sp.owner = u
+			sp.head = String(sd.get("head", ""))
+			sp.shaft = String(sd.get("shaft", ""))
+			sp.handle = String(sd.get("handle", ""))
+			sp.dig_depth = int(sd.get("dig_depth", 1))
+			sp.swing_dmg = int(sd.get("swing_dmg", 2))
+			sp.throw_range = int(sd.get("throw_range", 3))
+			u.spade = sp
+		if u.kind == "leader" and leader == null:
+			leader = u
+	if leader == null and not units.is_empty():
+		leader = units[0]
+	_spawn_enemy_force()
+	selected = leader
+	recompute_vision()
+	begin_turn()
+
 # Wrap `changed.emit()` so gravity + vision stay in sync without sprinkling
 # refreshes through every action.
 func _emit_changed() -> void:
@@ -355,15 +419,22 @@ func _check_game_over() -> void:
 	# Losing your whole team ends the run.
 	if team_alive_count(TEAM_PLAYER) == 0:
 		is_over = true
+		Meta.RunSave.clear()        # the run dies with the team
 		game_over.emit(TEAM_ENEMY)
 		return
 	# Wiping the enemy CLEARS THE AREA (campaign continues) instead of ending.
 	if team_alive_count(TEAM_ENEMY) == 0 and not _area_clear_emitted:
 		_area_clear_emitted = true
+		var coin_reward: int = 3
+		if branch == "flud" and stage_in_branch == 2:
+			coin_reward += 10
+		elif stage_in_branch == 2:
+			coin_reward += 5
 		if stage_in_branch == 2 and bosses_defeated.has(branch):
 			bosses_defeated[branch] = true
 			notice.emit("The governor of the %s has fallen!" % branch)
-		notice.emit("Area %d cleared!" % area)
+		Meta.add_coins(coin_reward)
+		notice.emit("Area %d cleared!  +%d coins (purse: %d)" % [area, coin_reward, Meta.coins])
 		area_cleared.emit(area)
 
 # ---------------------------------------------------------------- AI
@@ -707,6 +778,9 @@ func buy_blueprint(id: String) -> bool:
 			break
 	if bp.is_empty():
 		return false
+	if not Meta.is_unlocked(id):
+		notice.emit("Schematic locked — buy it with coins from the title screen.")
+		return false
 	if not can_afford_blueprint(bp):
 		notice.emit("Need %dw %do for %s." % [int(bp["wood"]), int(bp["oil"]), blueprint_card_title(id)])
 		return false
@@ -909,6 +983,7 @@ func advance_area(direction: String) -> void:
 	_spawn_enemy_force()
 	active_team = TEAM_PLAYER
 	notice.emit("Entered area %d (%s). The enemy grows stronger…" % [area, direction])
+	Meta.RunSave.write(self)
 	begin_turn()
 
 # First unoccupied standable surface cell spiralling out from (x, z).

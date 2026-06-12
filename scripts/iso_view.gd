@@ -288,7 +288,15 @@ func _ready() -> void:
 	world.cells_changed.connect(_on_cells_changed)
 
 	_build_hud()
-	gs.start()
+	if Meta.RunSave.pending_load:
+		Meta.RunSave.pending_load = false
+		var run_data: Dictionary = Meta.RunSave.read()
+		if run_data.is_empty():
+			gs.start()
+		else:
+			gs.start_from_save(run_data)
+	else:
+		gs.start()
 	_select(gs.selected)
 	# Player base is in the near corner — pan the camera so it starts centred.
 	if gs.selected != null:
@@ -1329,7 +1337,8 @@ func _draw_unit(u, alpha: float) -> void:
 		draw_circle(feet - Vector2(0, 14), 6.0 + 14.0 * (1.0 - ft), Color(1, 1, 1, 0.5 * ft))
 	if u.kind == "operator" and OperatorRig.ready():
 		# Rigged operator: 4 body parts, front arm follows the spade action.
-		var uh2: float = TILE_W * UNIT_SPRITE_SCALE / OperatorRig.FRAME_ASPECT
+		# Operators are little minions — half the height of other units.
+		var uh2: float = TILE_W * UNIT_SPRITE_SCALE / OperatorRig.FRAME_ASPECT * 0.5
 		var pose: Dictionary = {}
 		var act = _action_anims.get(u)
 		if act != null:
@@ -1395,16 +1404,21 @@ func _draw_unit(u, alpha: float) -> void:
 # throw / fish; vanishes at the throw release as the projectile takes over.
 func _spade_prop_pose(u, feet: Vector2) -> Variant:
 	var act = _action_anims.get(u)
+	var ps: float = _prop_scale(u)
 	if act == null:
 		if u.spade == null or u.kind in ["leader", "javelin", "plow", "boat", "wolf", "wizard", "king", "otter"]:
 			return null
-		return {"pos": feet + Vector2(10.0, -12.0), "rot": -0.30, "flip": false}
+		return {"pos": feet + Vector2(10.0, -12.0) * ps, "rot": -0.30, "flip": false}
 	var type: String = String(act["type"])
 	var t: float = clampf((_anim_t - float(act["t0"])) / float(SpadeActions.DUR.get(type, 0.6)), 0.0, 1.0)
 	var pose: Variant = SpadeActions.prop_pose(type, t, act["dir"])
 	if pose == null:
 		return null
-	return {"pos": feet + pose["off"], "rot": pose["rot"], "flip": pose["flip"]}
+	return {"pos": feet + Vector2(pose["off"]) * ps, "rot": pose["rot"], "flip": pose["flip"]}
+
+# Prop + offset scale per unit kind (operators are half-size minions).
+func _prop_scale(u) -> float:
+	return 0.55 if u.kind == "operator" else 1.0
 
 func _draw_spade_prop(u, feet: Vector2, alpha: float) -> void:
 	var pose: Variant = _spade_prop_pose(u, feet)
@@ -1413,7 +1427,7 @@ func _draw_spade_prop(u, feet: Vector2, alpha: float) -> void:
 	var tex: Texture2D = _texture_for("spade")
 	if tex == null:
 		return
-	var w := 17.0
+	var w: float = 17.0 * _prop_scale(u)
 	var h: float = w * float(tex.get_height()) / float(tex.get_width())
 	var sc := Vector2(-1.0, 1.0) if pose["flip"] else Vector2.ONE
 	draw_set_transform(pose["pos"], float(pose["rot"]), sc)
@@ -2246,7 +2260,8 @@ func _open_build_modal() -> void:
 		var id: String = String(bp["id"])
 		var tx: float = 20.0 + (i % cols) * tile_w
 		var ty: float = 54.0 + float(i / cols) * tile_h
-		var affordable: bool = gs.can_afford_blueprint(bp) \
+		var unlocked_schem: bool = Meta.is_unlocked(id)
+		var affordable: bool = unlocked_schem and gs.can_afford_blueprint(bp) \
 				and gs.active_team == GameState.TEAM_PLAYER and not gs.is_over
 		var tile := Panel.new()
 		tile.position = Vector2(tx, ty)
@@ -2270,10 +2285,12 @@ func _open_build_modal() -> void:
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tile.add_child(nm)
 		var cost := Label.new()
-		cost.text = _bp_cost_label(bp)
+		cost.text = _bp_cost_label(bp) if unlocked_schem \
+				else "LOCKED — %d coins" % Meta.price(id)
 		cost.add_theme_font_size_override("font_size", 12)
 		cost.add_theme_color_override("font_color",
-				Color(0.55, 0.95, 0.55) if affordable else Color(0.95, 0.55, 0.45))
+				Color(0.55, 0.95, 0.55) if affordable
+				else (Color(0.95, 0.55, 0.45) if unlocked_schem else Color(0.85, 0.75, 0.40)))
 		cost.position = Vector2(8, 112)
 		cost.size = Vector2(tile_w - 26.0, 18)
 		cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
