@@ -599,22 +599,60 @@ func _draw_tree(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> vo
 		tint = Color(d, d, d, alpha)
 	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
 
-# A puff (or two) of cloud over a fogged surface cell. Hash-driven variant,
-# size, and jitter; neighbouring puffs overlap into a continuous bank. Lives
-# on the cached terrain layer, so the bank only re-renders when vision grows.
-func _draw_fog_cloud(c: Vector3i, alpha: float) -> void:
-	var h: int = _wang_hash(c.x * 198491317 + c.z * 6542989)
-	var top: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 1.6, float(c.z) + 0.5)
-	var n_puffs: int = 1 + (h % 2)
-	for i in n_puffs:
-		var hh: int = _wang_hash(h + i * 7919)
-		var tex: Texture2D = _cloud_sprites[hh % _cloud_sprites.size()]
-		var w: float = TILE_W * (1.6 + float((hh >> 8) % 100) / 100.0)
+# The fog cloudbank, live edition: puffs anchored over fogged surface cells,
+# each drifting in a slow closed orbit around its anchor (so the bank wanders
+# without ever escaping the fog) and breathing slightly in scale. The puff
+# list rebuilds whenever vision changes; drawing happens every frame on the
+# live canvas.
+var _cloud_puffs: Array = []
+var _cloud_key: String = ""
+
+func _refresh_cloud_puffs() -> void:
+	if _cloud_sprites.is_empty():
+		return
+	var key: String = "%d|%d" % [gs.seen.size(), world.version]
+	if key == _cloud_key:
+		return
+	_cloud_key = key
+	_cloud_puffs.clear()
+	var up := Vector3i(0, 1, 0)
+	for cell_v in world.cells.keys():
+		var c: Vector3i = cell_v
+		if gs.seen.has(c) or world.is_solid(c + up):
+			continue
+		var h: int = _wang_hash(c.x * 198491317 + c.z * 6542989)
+		var anchor: Vector2 = iso_pt(float(c.x) + 0.5, float(c.y) + 1.6, float(c.z) + 0.5)
+		var n_puffs: int = 1 + (h % 2)
+		for i in n_puffs:
+			var hh: int = _wang_hash(h + i * 7919)
+			var tex: Texture2D = _cloud_sprites[hh % _cloud_sprites.size()]
+			var w: float = TILE_W * (1.6 + float((hh >> 8) % 100) / 100.0)
+			var jx: float = (float((hh >> 12) % 100) / 100.0 - 0.5) * TILE_W * 0.7
+			var jy: float = (float((hh >> 19) % 100) / 100.0 - 0.5) * TILE_H * 0.8
+			_cloud_puffs.append({
+				"tex": tex,
+				"pos": anchor + Vector2(jx, jy),
+				"w": w,
+				"ax": 8.0 + float((hh >> 5) % 8),
+				"ay": 3.0 + float((hh >> 9) % 4),
+				"fa": 0.10 + float((hh >> 13) % 10) * 0.012,
+				"fb": 0.07 + float((hh >> 16) % 10) * 0.010,
+				"ph": float(hh % 628) / 100.0,
+			})
+
+func _draw_cloud_layer() -> void:
+	for puff in _cloud_puffs:
+		var tex: Texture2D = puff["tex"]
+		var drift := Vector2(
+			sin(_anim_t * float(puff["fa"]) * TAU + float(puff["ph"])) * float(puff["ax"]),
+			sin(_anim_t * float(puff["fb"]) * TAU + float(puff["ph"]) * 1.7) * float(puff["ay"]))
+		var breathe: float = 1.0 + 0.04 * sin(_anim_t * 0.35 * TAU + float(puff["ph"]))
+		var w: float = float(puff["w"]) * breathe
 		var ch: float = w * float(tex.get_height()) / float(tex.get_width())
-		var jx: float = (float((hh >> 12) % 100) / 100.0 - 0.5) * TILE_W * 0.7
-		var jy: float = (float((hh >> 19) % 100) / 100.0 - 0.5) * TILE_H * 0.8
-		var rect := Rect2(top.x - w * 0.5 + jx, top.y - ch * 0.5 + jy, w, ch)
-		_draw_canvas.draw_texture_rect(tex, rect, false, Color(1, 1, 1, 0.93 * alpha))
+		var pos: Vector2 = Vector2(puff["pos"]) + drift
+		draw_texture_rect(tex, Rect2(pos.x - w * 0.5, pos.y - ch * 0.5, w, ch),
+			false, Color(1, 1, 1, 0.93))
+
 
 # Avalanche hash — decorrelates neighbouring cells and slots. The previous
 # multiplicative hash had linear structure that made the scatter form visible
@@ -908,6 +946,7 @@ func _draw() -> void:
 	for s in gs.dropped:
 		_draw_dropped_spade(s, 1.0)
 	_draw_streamlines()
+	_draw_cloud_layer()
 	_draw_ballista_anims()
 	_draw_projectiles()
 	_draw_fx()
@@ -1050,13 +1089,6 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	var shake := Vector2(0, _quake_offset(c))
 	var pattern: int = _cell_pattern(c, mat)
 	var shadowed: bool = _is_shadowed(c)
-	# Unexplored surface: the grey hint-cube plus a puffy cloudbank on top —
-	# the fog of war reads as actual cloud cover that parts as vision spreads.
-	if not seen_it and not _cloud_sprites.is_empty() \
-			and not world.is_solid(c + Vector3i(0, 1, 0)):
-		_draw_big_cube(c, mat, false, alpha, shake, shadowed)
-		_draw_fog_cloud(c, alpha)
-		return
 	# Tree: ONE tall sprite per column, drawn from the BOTTOM cell only —
 	# upper tree cells are part of the same image and skipped here.
 	if mat == VoxelWorld.Mat.TREE and seen_it and not _tree_variants.is_empty():
@@ -1905,6 +1937,7 @@ func _targets_for_mode() -> Array:
 	return []
 
 func _on_changed() -> void:
+	_refresh_cloud_puffs()
 	# Auto-follow the selected unit's level: snap view_level whenever their y
 	# changes (initial select, move_to, dig descent, …). Level +/- still works
 	# while a unit's level is steady, because we only sync on a CHANGE.
