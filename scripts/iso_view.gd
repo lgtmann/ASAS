@@ -129,6 +129,9 @@ var _terrain_sprites: Dictionary = {}
 # segmented (base/trunk/canopy) approach made the trunk widths fight. Variants
 # are chosen by hash so each tree column always picks the same look.
 var _tree_variants: Array = []
+# Tree base cells, collected during the cached terrain pass but DRAWN in the
+# live pass so they can sway (the cache stays static for perf).
+var _tree_bases: Array = []
 # Small decoration sprites scattered deterministically on grass cells.
 var _sprout_variants: Array = []
 # Puffy cloudbank sprites drawn over unexplored (fogged) surface cells.
@@ -598,7 +601,15 @@ func _draw_tree(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> vo
 	if shadowed:
 		var d: float = 1.0 - SHADOW_DARKEN
 		tint = Color(d, d, d, alpha)
-	_draw_canvas.draw_texture_rect(tex, rect, false, tint)
+	# Gentle sway: rotate around the trunk base so the canopy leans (phase per
+	# tree so the grove isn't in sync). The tree lives on the live layer now,
+	# so this animates without touching the terrain cache.
+	var phase: float = float((c.x * 7 + c.z * 13) % 628) / 100.0
+	var angle: float = sin(_anim_t * 1.1 + phase) * 0.035
+	var pivot := Vector2(centre.x, ground_y)
+	_draw_canvas.draw_set_transform(pivot, angle, Vector2.ONE)
+	_draw_canvas.draw_texture_rect(tex, Rect2(rect.position - pivot, rect.size), false, tint)
+	_draw_canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 # The fog cloudbank, live edition: puffs anchored over fogged surface cells,
 # each drifting in a slow closed orbit around its anchor (so the bank wanders
@@ -923,6 +934,10 @@ func _draw() -> void:
 	# Terrain cubes live on `terrain_layer` (z_index = -1, drawn behind us),
 	# which only redraws when something terrain-relevant changes.
 	_draw_canvas = self
+	# Trees: drawn live (behind highlights + units, matching their old z=-1
+	# cache position) so they can sway in the breeze.
+	for c in _tree_bases:
+		_draw_tree(c, 1.0, Vector2.ZERO, _is_shadowed(c))
 	for c in targets:
 		_draw_highlight(c)
 	var us := []
@@ -1041,6 +1056,7 @@ func _draw_terrain_layer(canvas: CanvasItem) -> void:
 	if world == null or gs == null:
 		return
 	_draw_canvas = canvas
+	_tree_bases.clear()             # rebuilt each cache pass; drawn live with sway
 	if _terrain_keys_dirty:
 		_terrain_keys = world.cells.keys()
 		_terrain_keys.sort_custom(func(a, b):
@@ -1095,7 +1111,7 @@ func _draw_cube(c: Vector3i, alpha: float) -> void:
 	if mat == VoxelWorld.Mat.TREE and seen_it and not _tree_variants.is_empty():
 		if world.material_at(c + Vector3i(0, -1, 0)) == VoxelWorld.Mat.TREE:
 			return                  # not the base — already drawn by it
-		_draw_tree(c, alpha, shake, shadowed)
+		_tree_bases.append(c)       # collected here, drawn live (with sway)
 		return
 	# Water: continuous recessed plane with bank waterlines + foam.
 	if mat == VoxelWorld.Mat.WATER and seen_it:
@@ -1340,14 +1356,17 @@ func _draw_unit(u, alpha: float) -> void:
 	var dp: Vector3 = u.draw_pos if u.draw_pos != Vector3.ZERO else Vector3(u.grid.x + 0.5, float(u.grid.y), u.grid.z + 0.5)
 	if u.kind == "boat":
 		dp.y += WATER_LEVEL          # hull rides the water surface
-	var feet: Vector2 = iso_pt(dp.x, dp.y, dp.z)
-	# Procedural puppet motion: hop arc while moving, gentle idle bob (phase
-	# offset per unit so the army doesn't breathe in sync), lunge on attack.
+	var ground: Vector2 = iso_pt(dp.x, dp.y, dp.z)
+	# Procedural puppet motion: hop arc while moving, else a gentle idle
+	# breathe (lift 0..3 px, per-unit phase so the army isn't in sync). The
+	# grounding shadow below shrinks + fades as the unit lifts.
+	var lift := 0.0
 	if _move_anim.has(u):
 		var mt: float = clampf((_anim_t - float(_move_anim[u])) / 0.26, 0.0, 1.0)
-		feet.y -= sin(mt * PI) * 6.0
+		lift = sin(mt * PI) * 7.0
 	else:
-		feet.y += sin(_anim_t * 4.6 + float(u.get_instance_id() % 628) / 100.0) * 1.4
+		lift = (sin(_anim_t * 3.0 + float(u.get_instance_id() % 628) / 100.0) * 0.5 + 0.5) * 3.0
+	var feet: Vector2 = ground - Vector2(0.0, lift)
 	if _lunges.has(u):
 		var lt: float = clampf((_anim_t - float(_lunges[u]["t0"])) / LUNGE_DUR, 0.0, 1.0)
 		feet += _lunges[u]["dir"] * (sin(lt * PI) * 12.0)
@@ -1372,14 +1391,20 @@ func _draw_unit(u, alpha: float) -> void:
 		col = col.lightened(0.25)
 	col.a = alpha
 
-	# Selection ring on the floor (wireframe diamond) FIRST so the body covers part of it.
-	if u == gs.selected:
-		var ring := _diamond(feet, TILE_W * 0.42, TILE_H * 0.42)
-		ring.append(ring[0])
-		draw_polyline(ring, Color(0.96, 0.78, 0.30), 2.8)
+	# Grounding shadow: stays on the floor (not bobbing), shrinks + fades as
+	# the unit lifts so it reads as hovering/breathing rather than sliding.
+	var sh: float = 1.0 - clampf(lift / 7.0, 0.0, 1.0) * 0.30
+	draw_colored_polygon(_diamond(ground + Vector2(0.0, 2.0),
+		TILE_W * 0.30 * sh, TILE_H * 0.30 * sh), Color(0, 0, 0, 0.10 + 0.20 * sh))
 
-	# Soft shadow.
-	draw_colored_polygon(_diamond(feet, TILE_W * 0.30, TILE_H * 0.30), Color(0, 0, 0, 0.25))
+	# Selection: a softly pulsing glow + ring on the floor.
+	if u == gs.selected:
+		var pulse: float = 0.5 + 0.5 * sin(_anim_t * 4.0)
+		draw_colored_polygon(_diamond(ground, TILE_W * (0.34 + 0.05 * pulse),
+			TILE_H * (0.34 + 0.05 * pulse)), Color(0.96, 0.78, 0.30, 0.10 + 0.10 * pulse))
+		var ring := _diamond(ground, TILE_W * 0.42, TILE_H * 0.42)
+		ring.append(ring[0])
+		draw_polyline(ring, Color(0.96, 0.78, 0.30, 0.7 + 0.3 * pulse), 2.4 + pulse)
 
 	# Body: tall ellipse for leader, short for operator.
 	var body_h: float = HEIGHT_STEP * (1.6 if u.kind == "leader" else 1.15)
@@ -2000,6 +2025,47 @@ func _refresh_combo_status() -> void:
 		status_label.text = "Combo: %s — %s" % \
 			[gs.combo_summary(selected_cards), String(v.get("reason", ""))]
 
+# Screen-space atmosphere: a subtle warm→cool light wash + a vignette, on a
+# CanvasLayer below the HUD so the world gains depth without dimming the UI.
+func _build_atmosphere() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 1
+	add_child(layer)
+	# Warm (upper-left) → cool (lower-right) light wash, very subtle.
+	var lg := Gradient.new()
+	lg.set_color(0, Color(1.0, 0.82, 0.45, 0.10))
+	lg.set_color(1, Color(0.28, 0.34, 0.72, 0.13))
+	var lt := GradientTexture2D.new()
+	lt.gradient = lg
+	lt.fill = GradientTexture2D.FILL_LINEAR
+	lt.fill_from = Vector2(0.12, 0.0)
+	lt.fill_to = Vector2(0.88, 1.0)
+	lt.width = 256
+	lt.height = 256
+	layer.add_child(_full_rect(lt))
+	# Vignette: transparent centre → dark corners.
+	var vg := Gradient.new()
+	vg.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	vg.colors = PackedColorArray([
+		Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0.02, 0.01, 0.05, 0.55)])
+	var vt := GradientTexture2D.new()
+	vt.gradient = vg
+	vt.fill = GradientTexture2D.FILL_RADIAL
+	vt.fill_from = Vector2(0.5, 0.5)
+	vt.fill_to = Vector2(1.0, 1.0)
+	vt.width = 256
+	vt.height = 256
+	layer.add_child(_full_rect(vt))
+
+func _full_rect(tex: Texture2D) -> TextureRect:
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_SCALE
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return tr
+
 func _on_notice(text: String) -> void:
 	if status_label != null:
 		status_label.text = text
@@ -2007,7 +2073,9 @@ func _on_notice(text: String) -> void:
 # ---------------------------------------------------------------- HUD
 
 func _build_hud() -> void:
+	_build_atmosphere()
 	hud = CanvasLayer.new()
+	hud.layer = 2                     # above the atmosphere wash (layer 1)
 	add_child(hud)
 	info_label = _label(Vector2(12, 10))
 	info_label.size = Vector2(540, 24)
