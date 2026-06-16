@@ -304,7 +304,7 @@ func _ready() -> void:
 	# Player base is in the near corner — pan the camera so it starts centred.
 	if gs.selected != null:
 		_center_on(gs.selected.grid)
-	_show_area_banner()
+	_play_battle_intro()
 	queue_redraw()
 	_maybe_spawn_showcase()
 	_maybe_spawn_built_showcase()
@@ -374,8 +374,17 @@ func _maybe_screenshot_and_quit() -> void:
 				focus = Vector2i(int(parts[0]), int(parts[1]))
 		elif arg.begins_with("--shot-zoom="):
 			shot_zoom = float(arg.trim_prefix("--shot-zoom="))
+	var intro_t := -1.0
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--intro-t="):
+			intro_t = float(arg.trim_prefix("--intro-t="))
 	if out_path == "":
 		return
+	if intro_t >= 0.0:
+		var intro := BattleIntro.new()
+		intro.setup("ENGAGE THE ENEMY")
+		intro.freeze_at(intro_t)
+		hud.add_child(intro)
 	if shot_zoom > 0.0:
 		zoom = shot_zoom
 		scale = Vector2(zoom, zoom)
@@ -2150,6 +2159,17 @@ func _current_hint() -> String:
 		return "Spend materials in the Build menu (hammer, right sidebar) — bought cards go to your hand."
 	return ""
 
+# Battle-start flourish: jagged shard curtains crawl in with a title block,
+# then withdraw to reveal the map; the area/objective banner follows on reveal.
+func _play_battle_intro() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--screenshot="):
+			return        # keep harness shots clean
+	var intro := BattleIntro.new()
+	intro.setup("ENGAGE THE ENEMY")
+	intro.revealed.connect(_show_area_banner)
+	hud.add_child(intro)
+
 # Big fading banner announcing the area + objective; shown on entry.
 func _show_area_banner() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -2300,7 +2320,7 @@ func _advance_area(direction: String) -> void:
 	if leader != null:
 		_select(leader)
 		_center_on(leader.grid)
-	_show_area_banner()
+	_play_battle_intro()
 
 # Art for a blueprint tile: structures use their placed art, buildings their
 # building sprite, the boat its unit sprite, dirt walls the earth card.
