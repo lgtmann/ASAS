@@ -2545,7 +2545,10 @@ func _on_turn_started(team: int) -> void:
 			gs.select(leader)        # _on_changed will re-focus view_level
 
 func _kick_ai() -> void:
-	if _ai_running or gs.is_over:
+	# Pause auto-play while a decision modal is up (area-clear reward /
+	# expansion). Without this, sim mode flips empty turns forever waiting on
+	# a choice nobody makes.
+	if _ai_running or gs.is_over or _modal != null:
 		return
 	_ai_running = true
 	mode = ""
@@ -2553,7 +2556,12 @@ func _kick_ai() -> void:
 	gs.selected = null
 	await _run_ai_turn(gs.active_team)
 	_ai_running = false
-	if not gs.is_over:
+	# Yield a frame before handing off. _run_ai_turn returns synchronously when
+	# a team has no legal action (e.g. one side wiped at battle's end), so
+	# without this the turn cycle would recurse on the call stack instead of
+	# iterating across frames — a guaranteed stack overflow.
+	await get_tree().process_frame
+	if not gs.is_over and _modal == null:
 		gs.end_turn()
 
 func _run_ai_turn(team: int) -> void:

@@ -15,17 +15,17 @@ config/description="ASAS - a 3D voxel deckbuilder where the spade is the core im
 run/main_scene="res://scenes/title.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 
+[autoload]
+
+Sfx="*res://scripts/audio.gd"
+Pad="*res://scripts/pad.gd"
+
 [display]
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
 window/size/mode=3
 window/stretch/mode="canvas_items"
-
-[autoload]
-
-Sfx="*res://scripts/audio.gd"
-Pad="*res://scripts/pad.gd"
 
 [gui]
 
@@ -35,4 +35,4 @@ theme/custom="res://assets/ui_theme.tres"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-environment/defaults/default_clear_color=Color(0.16, 0.13, 0.30, 1)
+environment/defaults/default_clear_color=Color(0.16, 0.13, 0.3, 1)
