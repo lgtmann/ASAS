@@ -70,6 +70,18 @@ const THROW_ARC := 36.0             # pixel lift at the apex
 
 # Camera-ish state (we use Node2D scale/position for pan+zoom).
 var zoom: float = 1.0
+# Camera dynamism: `_cam` is the LOGICAL camera (what pan/zoom/drag write);
+# the rendered `position` each frame is `_cam` + ambient drift + impact kick.
+# Programmatic moves (start, area, AI focus) ease `_cam` toward `_cam_target`;
+# any manual pan cancels the ease so the player always wins.
+var _cam: Vector2 = Vector2.ZERO
+var _cam_target: Vector2 = Vector2.ZERO
+var _cam_easing: bool = false
+var _cam_kick_t: float = -100.0     # _anim_t at the last impact kick
+var _cam_kick_mag: float = 0.0
+const CAM_EASE := 7.0               # ease-lerp speed for programmatic moves
+const CAM_DRIFT := Vector2(4.0, 3.0)
+const CAM_KICK_DUR := 0.28
 const ZOOM_MIN := 0.5
 const ZOOM_MAX := 2.2
 const ZOOM_STEP := 1.12
@@ -391,10 +403,21 @@ func _maybe_screenshot_and_quit() -> void:
 	print("SCREENSHOT_SAVED: ", out_path)
 	get_tree().quit()
 
-# Pan the view so grid cell `g` lands mid-screen.
-func _center_on(g: Vector3i) -> void:
+# Pan the view so grid cell `g` lands mid-screen. `ease` glides there over a
+# few frames (used for selection / AI focus); the default snaps (startup, area).
+func _center_on(g: Vector3i, ease: bool = false) -> void:
 	var target: Vector2 = iso_pt(float(g.x) + 0.5, float(g.y), float(g.z) + 0.5)
-	position = Vector2(800, 420) - target * zoom
+	_cam_target = Vector2(800, 420) - target * zoom
+	if ease:
+		_cam_easing = true
+	else:
+		_cam = _cam_target
+		_cam_easing = false
+
+# A brief decaying camera shake — impact "juice" on hits, volleys, quakes.
+func _cam_kick(mag: float) -> void:
+	_cam_kick_t = _anim_t
+	_cam_kick_mag = mag
 
 # --- Continuous ground -------------------------------------------------------
 # Earth renders as flat colour planes instead of tiled outlined cubes: adjacent
@@ -831,6 +854,8 @@ func _on_unit_attacked(attacker, target_grid: Vector3i) -> void:
 			"t0": _anim_t}
 	if attacker.spade != null:
 		_start_action(attacker, "swing", d)
+	if _ai_running:                 # follow the AI's action so the player sees it
+		_center_on(Vector3i(target_grid.x, target_grid.y, target_grid.z), true)
 
 func _on_unit_damaged(u, amount: int) -> void:
 	_hit_flash[u] = _anim_t
@@ -839,6 +864,7 @@ func _on_unit_damaged(u, amount: int) -> void:
 		"text": "-%d" % amount, "t0": _anim_t,
 		"col": Color(1.0, 0.32, 0.25) if u.team == 0 else Color(1.0, 0.88, 0.30)})
 	_spawn_burst(feet + Vector2(0, -10), Color(1, 1, 1, 0.9), 5, 60.0)
+	_cam_kick(min(2.0 + float(amount), 5.0))     # impact shake scales with damage
 
 func _on_unit_died(u, _grid: Vector3i) -> void:
 	_dying.append({"tex": _unit_sprites.get(u.kind), "team": u.team,
@@ -869,6 +895,7 @@ func _on_ballista_fired(cell: Vector3i) -> void:
 	if not _ballista_rig_tex.is_empty():
 		_ballista_anims[cell] = _anim_t
 		_ballista_shot_pending = true   # next spade_thrown gets the launch delay
+	_cam_kick(2.5)                       # recoil thump
 
 # Every ballista draws as a live-layer rig: idle loaded pose normally, the
 # smooth fire cycle when firing. Same footprint the static sprite used.
@@ -1573,8 +1600,27 @@ func _process(delta: float) -> void:
 	if jp.length() > 0.2:
 		pan -= jp
 	if pan != Vector2.ZERO:
-		position += pan * PAN_SPEED * delta
-		queue_redraw()
+		_cam += pan * PAN_SPEED * delta
+		_cam_easing = false              # manual pan cancels any programmatic ease
+		_cam_target = _cam
+	# Ease the logical camera toward a programmatic target (start / area / AI focus).
+	if _cam_easing:
+		_cam = _cam.lerp(_cam_target, clampf(CAM_EASE * delta, 0.0, 1.0))
+		if _cam.distance_to(_cam_target) < 0.8:
+			_cam = _cam_target
+			_cam_easing = false
+	# Compose the rendered transform: logical cam + slow ambient drift + a
+	# decaying impact kick (with a tiny zoom punch). This is the "alive camera".
+	var drift := Vector2(sin(_anim_t * 0.27), sin(_anim_t * 0.19 + 1.3)) * CAM_DRIFT
+	var kick := Vector2.ZERO
+	var zpunch := 1.0
+	var kt: float = (_anim_t - _cam_kick_t) / CAM_KICK_DUR
+	if kt >= 0.0 and kt < 1.0:
+		var decay: float = 1.0 - kt
+		kick = Vector2(sin(kt * 42.0), cos(kt * 35.0)) * _cam_kick_mag * decay
+		zpunch = 1.0 + 0.018 * decay
+	position = _cam + drift + kick
+	scale = Vector2(zoom * zpunch, zoom * zpunch)
 	# Earthquake bounce: advance time until the quake settles, then clear.
 	# During the bounce every cube is offset per-frame, so the terrain cache
 	# has to redraw alongside the dynamic layer.
@@ -1641,6 +1687,7 @@ func _on_quake_started(columns: Array) -> void:
 	for col in columns:
 		_quake_columns[col] = randf() * TAU
 	_quake_t = 0.0
+	_cam_kick(8.0)                  # the ground heaves — big camera shake
 	queue_redraw()
 
 # How much (in screen Y px) a cube at `c` should shift this frame to look like
@@ -1664,6 +1711,8 @@ func _on_unit_animated_move(u, from_g: Vector3i, to_g: Vector3i) -> void:
 	var to_pos := Vector3(to_g.x + 0.5, float(to_g.y), to_g.z + 0.5)
 	_moves_in_flight += 1
 	_move_anim[u] = _anim_t
+	if _ai_running:                 # glide the camera to follow AI movement
+		_center_on(to_g, true)
 	var tween := create_tween()
 	tween.tween_property(u, "draw_pos", to_pos, 0.26) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -1779,8 +1828,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_zoom_at(event.position, 1.0 / ZOOM_STEP)
 	elif event is InputEventMouseMotion and _panning:
-		# Drag-pan: move the Node2D so the world tracks the cursor.
-		position += event.relative
+		# Drag-pan: move the logical camera so the world tracks the cursor.
+		_cam += event.relative
+		_cam_easing = false
+		_cam_target = _cam
 		queue_redraw()
 
 # Zoom around the mouse position so the world point under the cursor stays put.
@@ -1789,10 +1840,12 @@ func _zoom_at(mouse_screen: Vector2, factor: float) -> void:
 	if new_zoom == zoom:
 		return
 	# Mouse position in our local (pre-transform) coordinates.
-	var local_before: Vector2 = (mouse_screen - position) / zoom
+	var local_before: Vector2 = (mouse_screen - _cam) / zoom
 	zoom = new_zoom
 	scale = Vector2(zoom, zoom)
-	position = mouse_screen - local_before * zoom
+	_cam = mouse_screen - local_before * zoom
+	_cam_target = _cam
+	_cam_easing = false
 
 func _set_view_level(level: int) -> void:
 	view_level = clampi(level, 0, VoxelWorld.SY - 1)
