@@ -15,6 +15,7 @@ const ANIMATIONS := [
 	{"name": "Operator: Throw", "action": "throw"},
 	{"name": "Operator: Fish", "action": "fish"},
 	{"name": "Jankovics Probe (shader)", "shader": true},
+	{"name": "Card Back (shader)", "shader": true, "shader_path": "res://assets/folk_back.gdshader"},
 	{
 		"name": "Ballista Fire (16f)",
 		"frames": [
@@ -278,7 +279,10 @@ func _load_anim(i: int) -> void:
 	stage.visible = not _rig_mode and not _shader_mode and _action_type == ""
 	if _shader_mode:
 		_shader_t = 0.0
-		info.text = "%s   |   metamorphosis + colour-cycle + radial ornament" % _anim_name
+		var spath: String = String(a.get("shader_path", "res://assets/jankovics_probe.gdshader"))
+		if _shader_mat != null and ResourceLoader.exists(spath):
+			_shader_mat.shader = load(spath)
+		info.text = "%s" % _anim_name
 		return
 	if _rig_mode:
 		_rig_t = -0.3

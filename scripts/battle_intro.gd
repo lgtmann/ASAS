@@ -95,27 +95,33 @@ func _map(edge: int, along: float, into: float, w: float, h: float) -> Vector2:
 		2: return Vector2(into, along * h)             # left
 		_: return Vector2(w - into, along * h)         # right
 
-func _draw_curtain(edge: int, depth: float, w: float, h: float) -> void:
+func _draw_curtain(edge: int, depth: float, w: float, h: float, flick: int) -> void:
 	var span: float = h if edge < 2 else w
 	var max_into: float = span * MAX_DEPTH * depth
 	var root: float = max_into * ROOT_DEPTH
-	var pts := PackedVector2Array()
-	pts.append(_map(edge, 0.0, 0.0, w, h))           # edge corner A
+	# Tooth envelope (valley/tip alternation).
 	var rim := PackedVector2Array()
 	var n := TEETH * 2
 	for j in n + 1:
 		var along: float = float(j) / float(n)
-		var into: float
-		if j % 2 == 0:
-			into = root                              # valley
-		else:
-			into = max_into * _teeth[edge][(j - 1) / 2]   # tip
-		var pos: Vector2 = _map(edge, along, into, w, h)
-		pts.append(pos)
-		rim.append(pos)
-	pts.append(_map(edge, 1.0, 0.0, w, h))           # edge corner B
-	draw_colored_polygon(pts, SHARD)
-	draw_polyline(rim, SHARD_RIM, 3.0, true)
+		var into: float = root if j % 2 == 0 else max_into * _teeth[edge][(j - 1) / 2]
+		rim.append(_map(edge, along, into, w, h))
+	# Crackle the leading edge: jog-within-jog lightning detail (stable per-edge
+	# seed so the silhouette holds — vs the clean triangles it was before).
+	var amp: float = max_into * 0.07
+	# Fill uses the CLEAN tooth envelope (a simple polygon that triangulates);
+	# the crackle lives only in the drawn lines below.
+	var poly := PackedVector2Array()
+	poly.append(_map(edge, 0.0, 0.0, w, h))
+	poly.append_array(rim)
+	poly.append(_map(edge, 1.0, 0.0, w, h))
+	draw_colored_polygon(poly, SHARD)
+	var jagged: PackedVector2Array = FolkFX.jag_chain(rim, 2, amp, 1013 + edge * 97)
+	# Indigo crackle rim + a brighter, flickering highlight bolt riding it.
+	draw_polyline(jagged, SHARD_RIM, 2.5, true)
+	var hot: PackedVector2Array = FolkFX.jag_chain(rim, 1, amp * 0.8, flick + edge * 31)
+	FolkFX.draw_bolt(self, hot, FolkFX.CREAM, FolkFX.ORANGE, 1.6, 5.0,
+		0.4 + 0.35 * float((flick + edge) % 3))
 
 func _draw() -> void:
 	var w := size.x
@@ -140,5 +146,18 @@ func _draw() -> void:
 	var cover: float = smoothstep(0.70, 0.99, depth)
 	if cover > 0.0:
 		draw_rect(Rect2(0, 0, w, h), Color(SHARD.r, SHARD.g, SHARD.b, cover))
+	var flick: int = int(_t * 1000.0)        # steps each frame → bolt flicker
 	for edge in 4:
-		_draw_curtain(edge, depth, w, h)
+		_draw_curtain(edge, depth, w, h, flick)
+	# A few lightning bolts crack across the dark field from the title block —
+	# strongest at full cover, gone once the map is revealed.
+	if cover > 0.05:
+		var centre := Vector2(w * 0.5, h * 0.5)
+		for i in 5:
+			var ang: float = float(i) / 5.0 * TAU + float(flick % 7) * 0.2
+			var reach: float = (w if i % 2 == 0 else h) * 0.55
+			var endp: Vector2 = centre + Vector2(cos(ang), sin(ang)) * reach
+			var bolt: PackedVector2Array = FolkFX.lightning(centre, endp, 5,
+				reach * 0.10, flick * 13 + i * 71)
+			FolkFX.draw_bolt(self, bolt, FolkFX.CREAM, FolkFX.INDIGO,
+				2.0, 7.0, cover * (0.5 + 0.5 * float((flick + i) % 2)))

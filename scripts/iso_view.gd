@@ -2473,6 +2473,17 @@ func _pile_panel(pos: Vector2) -> Panel:
 	p.position = pos
 	p.size = Vector2(88, 110)
 	hud.add_child(p)
+	# Living psychedelic card-back behind the count — the deck reads as a stack
+	# of face-down folk cards (self-animating via the shader's TIME).
+	if ResourceLoader.exists("res://assets/folk_back.gdshader"):
+		var back := ColorRect.new()
+		back.position = Vector2(5, 5)
+		back.size = Vector2(78, 100)
+		back.clip_contents = true
+		var mat := ShaderMaterial.new()
+		mat.shader = load("res://assets/folk_back.gdshader")
+		back.material = mat
+		p.add_child(back)
 	return p
 
 func _pile_label(parent: Panel, prefix: String) -> Label:
@@ -2481,6 +2492,10 @@ func _pile_label(parent: Panel, prefix: String) -> Label:
 	l.position = Vector2(6, 24)
 	l.size = Vector2(76, 60)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Heavy outline so the count stays legible over the animated back.
+	l.add_theme_color_override("font_color", Color(0.98, 0.94, 0.82))
+	l.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.06))
+	l.add_theme_constant_override("outline_size", 6)
 	parent.add_child(l)
 	return l
 
