@@ -1376,7 +1376,7 @@ func _draw_unit(u, alpha: float) -> void:
 	if u == gs.selected:
 		var ring := _diamond(feet, TILE_W * 0.42, TILE_H * 0.42)
 		ring.append(ring[0])
-		draw_polyline(ring, Color(1, 1, 0.3), 2.5)
+		draw_polyline(ring, Color(0.96, 0.78, 0.30), 2.8)
 
 	# Soft shadow.
 	draw_colored_polygon(_diamond(feet, TILE_W * 0.30, TILE_H * 0.30), Color(0, 0, 0, 0.25))
