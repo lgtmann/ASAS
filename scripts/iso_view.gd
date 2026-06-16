@@ -399,12 +399,12 @@ func _center_on(g: Vector3i) -> void:
 # contour lines are drawn only where the plane breaks — height steps, cliff
 # lips, water banks, the map silhouette — so the world looks like terrain, not
 # a grid. (Cells remain individually selectable; highlights are unaffected.)
-const EARTH_TOP := Color(0.74, 0.56, 0.35)
-const EARTH_RIGHT := Color(0.58, 0.42, 0.26)
-const EARTH_LEFT := Color(0.47, 0.33, 0.20)
-const GROUND_OUTLINE := Color(0.22, 0.14, 0.09)
-const OUTLINE_W := 2.5
-const STRATA_W := 1.4
+const EARTH_TOP := Color(0.80, 0.52, 0.22)
+const EARTH_RIGHT := Color(0.66, 0.33, 0.15)
+const EARTH_LEFT := Color(0.52, 0.22, 0.13)
+const GROUND_OUTLINE := Color(0.06, 0.04, 0.05)
+const OUTLINE_W := 3.5
+const STRATA_W := 2.0
 
 # Is the neighbouring column part of the same walkable plane? (Earth at the
 # same level with nothing solid on top — then no line between us.)
@@ -477,10 +477,10 @@ func _draw_strata(ta: Vector2, tb: Vector2, ba: Vector2, bb: Vector2, base: Colo
 # Water renders like the ground: one flat recessed plane per connected river,
 # with a dark waterline and a pale foam inset only along the banks. Moving
 # foam streaks (live layer) replace the old chevron arrows.
-const WATER_TOP := Color(0.18, 0.46, 0.82)
-const WATER_SIDE := Color(0.13, 0.32, 0.60)
-const WATER_LINE := Color(0.07, 0.16, 0.34)
-const WATER_FOAM := Color(0.88, 0.96, 1.00, 0.40)
+const WATER_TOP := Color(0.13, 0.16, 0.46)
+const WATER_SIDE := Color(0.09, 0.10, 0.32)
+const WATER_LINE := Color(0.05, 0.03, 0.06)
+const WATER_FOAM := Color(0.96, 0.90, 0.72, 0.55)
 const WATER_LEVEL := 0.70      # surface height within the cell (slightly recessed)
 
 func _water_at(n: Vector3i) -> bool:
@@ -669,7 +669,7 @@ func _wang_hash(v: int) -> int:
 # Flat translucent green wash over the exposed top face — turns bare dirt
 # tops into continuous meadow ground without the chunky 3D mat. Exactly
 # matches the face diamond, so adjacent cells share edges with no seams.
-const GRASS_TINT := Color(0.34, 0.76, 0.22, 0.42)   # WW spring green
+const GRASS_TINT := Color(0.72, 0.50, 0.12, 0.20)   # subtle warm gold wash
 func _draw_grass_tint(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
 	var col := GRASS_TINT
 	if shadowed:
@@ -686,15 +686,15 @@ func _draw_grass_tint(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool)
 func _cell_lushness(c: Vector3i) -> float:
 	var bh: int = _wang_hash((c.x >> 1) * 198491317 + (c.z >> 1) * 6542989)
 	match bh % 4:
-		0: return 0.45
-		1: return 0.70
-		_: return 0.95
+		0: return 0.15
+		1: return 0.35
+		_: return 0.60
 
 # Up to SPROUT_SLOTS decoration sprites per grass cell, hashed from the cell
 # coordinate so the layout never shimmers between redraws. All of this lands
 # on the CACHED terrain layer — zero per-frame cost; it only re-renders when
 # terrain actually changes.
-const SPROUT_SLOTS := 9
+const SPROUT_SLOTS := 5
 const SPROUT_GROUND_FRAC := 0.85       # vertical anchor within each sprite
 func _draw_sprouts(c: Vector3i, alpha: float, shake: Vector2, shadowed: bool) -> void:
 	if _sprout_variants.is_empty():
