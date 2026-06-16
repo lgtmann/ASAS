@@ -703,20 +703,30 @@ func recompute_vision() -> void:
 			continue
 		_reveal_from(u)
 
+const VISION_RADIUS := 5     # guaranteed fog-clear radius around each friendly unit
+
 func _reveal_from(u) -> void:
-	# A friendly unit reveals every cell on its own y-plane reachable by an
-	# unobstructed 2D ray (Bresenham), plus the cube directly below each
-	# revealed air cell (the visible floor — solid earth OR water in a trench).
 	var y: int = u.grid.y
+	# 1. A guaranteed clear disc around the unit — fog ALWAYS lifts nearby,
+	#    independent of line-of-sight, so clouds never crowd the characters.
+	for dx in range(-VISION_RADIUS, VISION_RADIUS + 1):
+		for dz in range(-VISION_RADIUS, VISION_RADIUS + 1):
+			if dx * dx + dz * dz > VISION_RADIUS * VISION_RADIUS:
+				continue
+			_mark_seen(u.grid.x + dx, u.grid.z + dz, y)
+	# 2. Line-of-sight sweep for far vision across open ground.
 	for tx in world.SX:
 		for tz in world.SZ:
-			if not _xz_los(u.grid.x, u.grid.z, tx, tz, y):
-				continue
-			var here := Vector3i(tx, y, tz)
-			seen[here] = true
-			var below := Vector3i(tx, y - 1, tz)
-			if world.material_at(below) != VoxelWorld.Mat.AIR:
-				seen[below] = true
+			if _xz_los(u.grid.x, u.grid.z, tx, tz, y):
+				_mark_seen(tx, tz, y)
+
+# Reveal the whole column at (tx, tz) around plane y — clears the floor below
+# and any tall feature (tree, boulder) above, so nothing pokes through fogged.
+func _mark_seen(tx: int, tz: int, y: int) -> void:
+	for yy in range(y - 1, y + 4):
+		var p := Vector3i(tx, yy, tz)
+		if world.in_bounds(p):
+			seen[p] = true
 
 # Returns true iff the 2D segment from (sx,sz) to (tx,tz) at y has no solid
 # cell strictly between the endpoints.
