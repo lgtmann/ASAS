@@ -720,10 +720,11 @@ func _reveal_from(u) -> void:
 			if _xz_los(u.grid.x, u.grid.z, tx, tz, y):
 				_mark_seen(tx, tz, y)
 
-# Reveal the whole column at (tx, tz) around plane y — clears the floor below
-# and any tall feature (tree, boulder) above, so nothing pokes through fogged.
+# Reveal the whole column at (tx, tz) around plane y. Looks well DOWN (into
+# recessed water trenches and dug pits — the river sits below the surface) and
+# a few cells up (tall trees / boulders), so depth never leaves a cell fogged.
 func _mark_seen(tx: int, tz: int, y: int) -> void:
-	for yy in range(y - 1, y + 4):
+	for yy in range(y - 5, y + 4):
 		var p := Vector3i(tx, yy, tz)
 		if world.in_bounds(p):
 			seen[p] = true
