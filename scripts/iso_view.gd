@@ -2169,6 +2169,15 @@ func _play_battle_intro() -> void:
 	intro.setup("ENGAGE THE ENEMY")
 	intro.revealed.connect(_show_area_banner)
 	hud.add_child(intro)
+	# Hide the heavy first-load frames (world gen, vision, terrain cache first
+	# render, texture decode) behind the opaque hold, THEN reveal smoothly.
+	# Force the terrain cache to render and wait several real frames — slow
+	# load frames are absorbed here, not during the visible withdrawal.
+	if terrain_layer != null:
+		terrain_layer.queue_redraw()
+	for _i in 6:
+		await get_tree().process_frame
+	intro.begin_reveal()
 
 # Big fading banner announcing the area + objective; shown on entry.
 func _show_area_banner() -> void:
