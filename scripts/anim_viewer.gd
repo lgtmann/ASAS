@@ -14,6 +14,7 @@ const ANIMATIONS := [
 	{"name": "Operator: Swing", "action": "swing"},
 	{"name": "Operator: Throw", "action": "throw"},
 	{"name": "Operator: Fish", "action": "fish"},
+	{"name": "Jankovics Probe (shader)", "shader": true},
 	{
 		"name": "Ballista Fire (16f)",
 		"frames": [
@@ -54,6 +55,10 @@ var _rig_mode: bool = false
 var _rig_t: float = -0.3        # idle hold before the cycle starts
 var _rig_tex: Dictionary = {}
 var action_stage: Control
+var shader_stage: ColorRect
+var _shader_mat: ShaderMaterial
+var _shader_mode: bool = false
+var _shader_t: float = 0.0
 var _action_type: String = ""
 var _act_t: float = -0.25       # idle hold, then the action cycle
 var _act_tex: Dictionary = {}
@@ -159,6 +164,17 @@ func _ready() -> void:
 		if ResourceLoader.exists(entry[1]):
 			_act_tex[entry[0]] = load(entry[1])
 
+	# Shader stage: a full-rect ColorRect running the Jankovics probe shader.
+	shader_stage = ColorRect.new()
+	shader_stage.position = stage.position
+	shader_stage.size = stage.size
+	if ResourceLoader.exists("res://assets/jankovics_probe.gdshader"):
+		_shader_mat = ShaderMaterial.new()
+		_shader_mat.shader = load("res://assets/jankovics_probe.gdshader")
+		shader_stage.material = _shader_mat
+	shader_stage.visible = false
+	stage.get_parent().add_child(shader_stage)
+
 	_load_anim(0)
 	# Tuning harness: --anim-shot=path [--anim-idx=N] [--anim-t=f]
 	var shot_path := ""
@@ -174,6 +190,9 @@ func _ready() -> void:
 		_playing = false
 		_rig_t = shot_t
 		_act_t = shot_t
+		_shader_t = shot_t
+		if _shader_mat != null:
+			_shader_mat.set_shader_parameter("t", shot_t)
 		rig_stage.queue_redraw()
 		action_stage.queue_redraw()
 		_shot_and_quit(shot_path)
@@ -248,12 +267,19 @@ func _load_anim(i: int) -> void:
 	var a: Dictionary = ANIMATIONS[i]
 	_anim_name = String(a["name"])
 	_rig_mode = bool(a.get("rig", false))
+	_shader_mode = bool(a.get("shader", false))
 	_action_type = String(a.get("action", ""))
 	if rig_stage != null:
 		rig_stage.visible = _rig_mode
 	if action_stage != null:
 		action_stage.visible = _action_type != ""
-	stage.visible = not _rig_mode and _action_type == ""
+	if shader_stage != null:
+		shader_stage.visible = _shader_mode
+	stage.visible = not _rig_mode and not _shader_mode and _action_type == ""
+	if _shader_mode:
+		_shader_t = 0.0
+		info.text = "%s   |   metamorphosis + colour-cycle + radial ornament" % _anim_name
+		return
 	if _rig_mode:
 		_rig_t = -0.3
 		info.text = "%s   |   %s" % [_anim_name, BallistaRig.phase_name(_rig_t)]
@@ -280,6 +306,12 @@ func _toggle_play() -> void:
 	play_btn.text = "Pause" if _playing else "Play"
 
 func _advance() -> void:
+	if _shader_mode:
+		_shader_t = fmod(_shader_t + 0.04, 1.0)
+		if _shader_mat != null:
+			_shader_mat.set_shader_parameter("t", _shader_t)
+		info.text = "%s   |   t=%.2f" % [_anim_name, _shader_t]
+		return
 	if _action_type != "":
 		_act_t += 0.04
 		if _act_t > 1.2:
@@ -311,6 +343,12 @@ func _show_frame() -> void:
 
 func _process(delta: float) -> void:
 	if not _playing:
+		return
+	if _shader_mode:
+		_shader_t = fmod(_shader_t + delta * _speed * 0.18, 1.0)
+		if _shader_mat != null:
+			_shader_mat.set_shader_parameter("t", _shader_t)
+		info.text = "%s   |   t=%.2f   |   %.2fx" % [_anim_name, _shader_t, _speed]
 		return
 	if _action_type != "":
 		_act_t += delta * _speed / float(SpadeActions.DUR.get(_action_type, 0.6))
