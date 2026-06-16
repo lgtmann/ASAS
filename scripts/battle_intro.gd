@@ -1,109 +1,80 @@
 class_name BattleIntro
 extends Control
 
-# Battle-start flourish (full-shader). A single fragment shader (battle_intro
-# .gdshader) draws jagged blue shard curtains crawling in over a grainy
-# starfield with a glowing folk sun-emblem; this script just drives the
-# `progress` uniform through three phases and overlays the gold title.
-#
-#   SLAM    progress 0→1 fast (a hitch here is hidden — it's brief)
-#   HOLD    progress = 1, opaque cover; waits for the scene to settle so the
-#           heavy first-load frames pass behind black, then for a min hold
-#   WITHDRAW progress 1→0; COLOR.a falls with it, revealing the map
-#
-# `begin_reveal()` (called by iso_view once terrain has rendered) unlocks the
-# withdrawal. A fallback timer unlocks it anyway so the intro can't hang.
+# Step 1 of the rebuilt battle intro: a single dynamically-drawn lightning
+# bolt that strikes down from the top of the screen to the centre. Pure _draw
+# (a few glowing polylines) — no shader, no full-screen fill, so it's cheap.
+# Regenerates its jag each frame for a live flicker, then frees itself.
 
 signal revealed
 
-const SLAM_DUR := 0.22
-const MIN_HOLD := 0.35
-const WITHDRAW_DUR := 0.75
-const FALLBACK_REVEAL := 2.5      # auto-unlock if nobody calls begin_reveal()
+const DUR := 1.1                 # how long the strike lingers before reveal
+const PASSES := 6                # recursive subdivisions of the main bolt
+const FORKS := 2                 # short branches off the main bolt
 
-var _title := "ENGAGE THE ENEMY"
-var _phase := 0                   # 0 slam, 1 hold, 2 withdraw
-var _elapsed := 0.0
-var _hold := 0.0
-var _reveal_allowed := false
+const GLOW := Color(0.13, 0.18, 0.55)   # indigo outer glow
+const MID := Color(0.22, 0.42, 0.92)    # blue mid
+const CORE := Color(0.97, 0.97, 1.0)    # near-white hot core
+
+var _t := 0.0
 var _frozen := false
-var _frozen_p := 1.0
-var _rect: ColorRect
-var _mat: ShaderMaterial
-var _label: Label
+var _seed := 1
 
-func setup(title: String) -> void:
-	_title = title
-
-func begin_reveal() -> void:
-	_reveal_allowed = true
-
-func freeze_at(p: float) -> void:
+func freeze_at(tv: float) -> void:
 	_frozen = true
-	_frozen_p = p           # applied in _ready once the material exists
+	_t = tv
+	_seed = int(tv * 1000.0) | 1
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	_rect = ColorRect.new()
-	_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ResourceLoader.exists("res://assets/battle_intro.gdshader"):
-		_mat = ShaderMaterial.new()
-		_mat.shader = load("res://assets/battle_intro.gdshader")
-		_rect.material = _mat
-	add_child(_rect)
-	_label = Label.new()
-	_label.text = _title
-	_label.add_theme_font_size_override("font_size", 62)
-	_label.add_theme_color_override("font_color", Color(0.96, 0.82, 0.40))
-	_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.06))
-	_label.add_theme_constant_override("outline_size", 12)
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_label)
-	_update_aspect()
-	resized.connect(_update_aspect)
-	_set_progress(_frozen_p if _frozen else 0.0)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if not _frozen:
 		Sfx.play("quake", 0.0, 0.0)
-
-func _update_aspect() -> void:
-	if _mat != null and size.y > 0.0:
-		_mat.set_shader_parameter("aspect", size.x / size.y)
-	if _label != null:
-		var bw := 760.0
-		var bh := 150.0
-		_label.position = Vector2((size.x - bw) * 0.5, (size.y - bh) * 0.5)
-		_label.size = Vector2(bw, bh)
-
-func _set_progress(p: float) -> void:
-	if _mat != null:
-		_mat.set_shader_parameter("progress", p)
-	if _label != null:
-		_label.modulate.a = clampf((p - 0.3) / 0.5, 0.0, 1.0)
+	queue_redraw()
 
 func _process(delta: float) -> void:
 	if _frozen:
 		return
-	_elapsed += delta
-	match _phase:
-		0:
-			var k: float = clampf(_elapsed / SLAM_DUR, 0.0, 1.0)
-			_set_progress(1.0 - pow(1.0 - k, 3.0))      # ease-out slam
-			if k >= 1.0:
-				_phase = 1
-				_hold = 0.0
-		1:
-			_set_progress(1.0)
-			_hold += delta
-			if (_reveal_allowed and _hold >= MIN_HOLD) or _hold >= FALLBACK_REVEAL:
-				_phase = 2
-				_elapsed = 0.0
-		2:
-			var k2: float = clampf(_elapsed / WITHDRAW_DUR, 0.0, 1.0)
-			_set_progress(1.0 - (k2 * k2))              # ease-in snap back
-			if k2 >= 1.0:
-				revealed.emit()
-				queue_free()
+	_t += delta
+	_seed = int(_t * 90.0) | 1          # steps a few times per frame → flicker
+	queue_redraw()
+	if _t >= DUR:
+		revealed.emit()
+		queue_free()
+
+# Brightness envelope: bright flash on impact, easing off over the duration,
+# with a little per-frame flicker.
+func _intensity() -> float:
+	if _frozen:
+		return 1.0
+	var env: float = 1.0 - smoothstep(0.0, DUR, _t) * 0.7
+	var flick: float = 0.7 + 0.3 * float(_seed % 5) / 4.0
+	return clampf(env * flick, 0.0, 1.0)
+
+# Three stacked polylines (wide soft glow → blue mid → hot core) make the bolt
+# read as glowing rather than a flat line.
+func _draw_bolt(pts: PackedVector2Array, scale: float, a: float) -> void:
+	if pts.size() < 2:
+		return
+	draw_polyline(pts, Color(GLOW.r, GLOW.g, GLOW.b, 0.30 * a), 13.0 * scale, true)
+	draw_polyline(pts, Color(MID.r, MID.g, MID.b, 0.55 * a), 6.0 * scale, true)
+	draw_polyline(pts, Color(CORE.r, CORE.g, CORE.b, 0.95 * a), 2.4 * scale, true)
+
+func _draw() -> void:
+	var a := _intensity()
+	if a <= 0.01:
+		return
+	var top := Vector2(size.x * 0.5, 0.0)
+	var centre := Vector2(size.x * 0.5, size.y * 0.5)
+	var amp: float = (centre.y - top.y) * 0.11
+	var main: PackedVector2Array = FolkFX.lightning(top, centre, PASSES, amp, _seed)
+	# Short forks branching off points partway down the main bolt.
+	for i in FORKS:
+		var idx: int = int(main.size() * (0.4 + 0.22 * float(i)))
+		idx = clampi(idx, 1, main.size() - 1)
+		var base: Vector2 = main[idx]
+		var dir: float = -1.0 if i % 2 == 0 else 1.0
+		var tip: Vector2 = base + Vector2(dir * size.y * 0.16, size.y * 0.13)
+		var fork: PackedVector2Array = FolkFX.lightning(base, tip, 4, amp * 0.7, _seed + 53 + i * 17)
+		_draw_bolt(fork, 0.6, a * 0.85)
+	_draw_bolt(main, 1.0, a)
